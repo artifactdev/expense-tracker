@@ -1,12 +1,20 @@
 import { NextRequest } from 'next/server';
 
 import { prisma } from '@/lib/prisma';
-import { getAISettings } from '@/services/ai';
+import {
+  buildCategoryTree,
+  formatCategoryTreeForPrompt,
+  getAISettings,
+  suggestCategoriesBatch,
+  type BatchTransaction,
+} from '@/services/ai';
 import { capitalizeFirstLetter } from '@/utils/capitalize-first-letter';
 import { LOCAL_USER_ID } from '@/utils/const';
 
 // Allow up to 5 minutes for bulk categorization
 export const maxDuration = 300;
+
+const BATCH_SIZE = 15;
 
 function sseEvent(data: unknown): string {
   return `data: ${JSON.stringify(data)}\n\n`;
@@ -29,15 +37,27 @@ export async function POST(request: NextRequest) {
           return;
         }
 
-        // Load user categories for suggestions
+        // Load user categories with hierarchy
         const userCatRows = await prisma.userCategory.findMany({
           where: { userId: LOCAL_USER_ID },
           include: { category: true },
         });
-        const commonCats = await prisma.category.findMany({ where: { common: true } });
-        const allCategoryNames = Array.from(
-          new Set([...commonCats.map(c => c.name), ...userCatRows.map(uc => uc.category.name)])
-        );
+        const flatCats = userCatRows.map(uc => ({
+          id: uc.category.id,
+          name: uc.category.name,
+          parentId: uc.category.parentId,
+        }));
+        const tree = buildCategoryTree(flatCats);
+        const categoryTreePrompt = formatCategoryTreeForPrompt(tree);
+
+        // Pre-build category map (name → { id, parentId }) for quick lookups
+        const allDbCats = await prisma.category.findMany({
+          select: { id: true, name: true, parentId: true },
+        });
+        const categoryByName = new Map<string, { id: string; parentId: string | null }>();
+        for (const c of allDbCats) categoryByName.set(c.name, { id: c.id, parentId: c.parentId });
+
+        const userCategoryIds = new Set<string>(userCatRows.map(uc => uc.categoryId));
 
         // Load transactions to process
         const transactions = await prisma.transaction.findMany({
@@ -57,92 +77,85 @@ export async function POST(request: NextRequest) {
 
         send({ type: 'start', total: transactions.length });
 
-        const baseSystemPrompt = `You are a personal finance assistant. Your job is to assign categories to bank transactions.
-Rules:
-- ALWAYS prefer categories from the provided list. Only invent a new category name if none of the existing ones is even remotely suitable.
-- NEVER return vague or meaningless categories like "Generic", "Other", "Miscellaneous", or "Unknown".
-- Base your decision primarily on the payee/counterparty name and the transaction description, not just the amount.
-- Return a JSON array of strings with 1–3 category names. Nothing else.
-Example: ["Groceries", "Food"]`;
-
-        const systemPrompt = settings.aiSystemPrompt
-          ? `${settings.aiSystemPrompt}\n\n${baseSystemPrompt}`
-          : baseSystemPrompt;
-
-        const endpoint = settings.aiEndpoint.replace(/\/$/, '');
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (settings.aiApiKey) headers['Authorization'] = `Bearer ${settings.aiApiKey}`;
-
         let processed = 0;
         let failed = 0;
         let skipped = 0;
+        let done = 0;
 
-        for (const tx of transactions) {
-          try {
-            const promptLines: string[] = [];
-            if (tx.counterparty) promptLines.push(`Payee/Counterparty: "${tx.counterparty}"`);
-            promptLines.push(`Transaction description: "${tx.name}"`);
-            promptLines.push(`Amount: ${tx.amount} (negative = expense, positive = income)`);
-            if (tx.notes) promptLines.push(`Notes: "${tx.notes}"`);
-            promptLines.push(
-              `Available categories: ${allCategoryNames.length > 0 ? allCategoryNames.join(', ') : 'none yet'}`
-            );
-            promptLines.push(`\nReturn a JSON array with 1–3 category names from the list above.`);
-            const userPrompt = promptLines.join('\n');
-
-            const res = await fetch(`${endpoint}/chat/completions`, {
-              method: 'POST',
-              headers,
-              signal: AbortSignal.timeout(60000),
-              body: JSON.stringify({
-                model: settings.aiModel,
-                messages: [
-                  { role: 'system', content: systemPrompt },
-                  { role: 'user', content: userPrompt },
-                ],
-                temperature: 0.2,
-                max_tokens: settings.aiMaxTokens ?? 2048,
-              }),
+        // Helper: resolve a category name to an ID, creating if needed
+        const resolveCategoryId = async (name: string): Promise<string | null> => {
+          let entry = categoryByName.get(name);
+          if (!entry) {
+            try {
+              const created = await prisma.category.create({
+                data: {
+                  name: capitalizeFirstLetter(name),
+                  slug: name.toLowerCase().replace(/\s+/g, '-'),
+                },
+              });
+              entry = { id: created.id, parentId: null };
+              categoryByName.set(name, entry);
+            } catch {
+              const existing = await prisma.category.findFirst({ where: { name } });
+              if (!existing) return null;
+              entry = { id: existing.id, parentId: existing.parentId };
+              categoryByName.set(name, entry);
+            }
+          }
+          if (!userCategoryIds.has(entry.id)) {
+            await prisma.userCategory.upsert({
+              where: { userId_categoryId: { userId: LOCAL_USER_ID, categoryId: entry.id } },
+              update: {},
+              create: { userId: LOCAL_USER_ID, categoryId: entry.id },
             });
+            userCategoryIds.add(entry.id);
+          }
+          return entry.id;
+        };
 
-            if (!res.ok) {
+        // Process in batches
+        for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
+          const batch = transactions.slice(i, i + BATCH_SIZE);
+          const batchInput: BatchTransaction[] = batch.map((tx, j) => ({
+            idx: j + 1,
+            name: tx.name,
+            amount: tx.amount,
+            counterparty: tx.counterparty,
+            notes: tx.notes,
+          }));
+
+          let batchResult;
+          try {
+            batchResult = await suggestCategoriesBatch(batchInput, categoryTreePrompt, settings);
+          } catch {
+            // Entire batch failed
+            for (const tx of batch) {
+              done++;
               failed++;
               send({
                 type: 'progress',
-                current: processed + skipped + failed,
+                current: done,
                 total: transactions.length,
                 name: tx.name,
                 counterparty: tx.counterparty,
                 suggestions: [],
                 status: 'failed',
               });
-              continue;
             }
+            continue;
+          }
 
-            const json = await res.json();
-            // Reasoning models (Qwen, DeepSeek) put output in `reasoning` when content is null
-            const rawContent: string | null = json.choices?.[0]?.message?.content ?? null;
-            const rawReasoning: string | null = json.choices?.[0]?.message?.reasoning ?? null;
-            const raw: string = rawContent ?? rawReasoning ?? '';
-            // Strip reasoning blocks emitted by thinking models (e.g. Qwen, DeepSeek)
-            const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-            // Greedy match: find the LAST [...] array in the response
-            const match = cleaned.match(/\[[\s\S]*\]/);
-            let suggestions: string[] = [];
-            try {
-              const parsed = JSON.parse(match ? match[0] : cleaned);
-              if (Array.isArray(parsed)) {
-                suggestions = parsed.filter((s): s is string => typeof s === 'string').slice(0, 3);
-              }
-            } catch {
-              /* ignore */
-            }
+          // Process each result in the batch
+          for (let j = 0; j < batch.length; j++) {
+            const tx = batch[j];
+            const suggestions = batchResult?.[j + 1] ?? [];
 
             if (suggestions.length === 0) {
+              done++;
               skipped++;
               send({
                 type: 'progress',
-                current: processed + skipped + failed,
+                current: done,
                 total: transactions.length,
                 name: tx.name,
                 counterparty: tx.counterparty,
@@ -152,78 +165,66 @@ Example: ["Groceries", "Food"]`;
               continue;
             }
 
-            // Resolve/create category IDs
-            const categoryIds = await Promise.all(
-              suggestions.map(async name => {
-                const existing = await prisma.category.findFirst({
-                  where: { name },
-                });
-                if (existing) {
-                  await prisma.userCategory.upsert({
-                    where: {
-                      userId_categoryId: { userId: LOCAL_USER_ID, categoryId: existing.id },
-                    },
-                    update: {},
-                    create: { userId: LOCAL_USER_ID, categoryId: existing.id },
-                  });
-                  return existing.id;
-                }
-                const created = await prisma.category.create({
-                  data: {
-                    name: capitalizeFirstLetter(name),
-                    slug: name.toLowerCase().replace(/\s+/g, '-'),
-                  },
-                });
-                await prisma.userCategory.create({
-                  data: { userId: LOCAL_USER_ID, categoryId: created.id },
-                });
-                return created.id;
-              })
+            // Resolve category IDs (max 2: parent + child)
+            const categoryIds = (await Promise.all(suggestions.map(resolveCategoryId))).filter(
+              (id): id is string => id !== null
             );
 
-            // Apply categories (upsert — keep existing + add new)
-            await prisma.$transaction(async tx_ => {
-              if (mode === 'all') {
-                await tx_.transactionCategory.deleteMany({ where: { transactionId: tx.id } });
-              }
-              for (const cid of categoryIds) {
-                await tx_.transactionCategory.upsert({
-                  where: { transactionId_categoryId: { transactionId: tx.id, categoryId: cid } },
-                  update: {},
-                  create: { transactionId: tx.id, categoryId: cid },
-                });
-              }
-            });
-
-            // Add new category names to allCategoryNames for subsequent iterations
-            for (const name of suggestions) {
-              if (!allCategoryNames.includes(name)) allCategoryNames.push(name);
+            if (categoryIds.length === 0) {
+              done++;
+              skipped++;
+              send({
+                type: 'progress',
+                current: done,
+                total: transactions.length,
+                name: tx.name,
+                counterparty: tx.counterparty,
+                suggestions: [],
+                status: 'skipped',
+              });
+              continue;
             }
 
-            processed++;
-            send({
-              type: 'progress',
-              current: processed + skipped + failed,
-              total: transactions.length,
-              name: tx.name,
-              counterparty: tx.counterparty,
-              suggestions,
-              status: 'ok',
-            });
+            try {
+              await prisma.$transaction(async tx_ => {
+                if (mode === 'all') {
+                  await tx_.transactionCategory.deleteMany({ where: { transactionId: tx.id } });
+                }
+                for (const cid of categoryIds.slice(0, 2)) {
+                  await tx_.transactionCategory.upsert({
+                    where: {
+                      transactionId_categoryId: { transactionId: tx.id, categoryId: cid },
+                    },
+                    update: {},
+                    create: { transactionId: tx.id, categoryId: cid },
+                  });
+                }
+              });
 
-            // Brief pause to avoid overwhelming the AI server
-            await new Promise(resolve => setTimeout(resolve, 300));
-          } catch {
-            failed++;
-            send({
-              type: 'progress',
-              current: processed + skipped + failed,
-              total: transactions.length,
-              name: tx.name,
-              counterparty: tx.counterparty,
-              suggestions: [],
-              status: 'failed',
-            });
+              done++;
+              processed++;
+              send({
+                type: 'progress',
+                current: done,
+                total: transactions.length,
+                name: tx.name,
+                counterparty: tx.counterparty,
+                suggestions,
+                status: 'ok',
+              });
+            } catch {
+              done++;
+              failed++;
+              send({
+                type: 'progress',
+                current: done,
+                total: transactions.length,
+                name: tx.name,
+                counterparty: tx.counterparty,
+                suggestions: [],
+                status: 'failed',
+              });
+            }
           }
         }
 

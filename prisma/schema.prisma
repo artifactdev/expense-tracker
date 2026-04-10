@@ -43,6 +43,7 @@ model Transaction {
   notes        String?
   counterparty String?
   account      String?
+  paymentType  String?
   categories   TransactionCategory[]
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt

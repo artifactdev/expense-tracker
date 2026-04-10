@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 const CategorySchema = z.object({
   id: z.union([z.number(), z.string()]),
@@ -10,17 +10,21 @@ const CategorySchema = z.object({
 // when the number input is empty
 const stringOrNumberAsNumber = z
   .union([z.string(), z.number()])
-  .transform((val) => (typeof val === "string" ? parseFloat(val) : val))
-  .refine((val) => !isNaN(val), { message: "Amount must be a valid number" });
+  .transform(val => (typeof val === 'string' ? parseFloat(val) : val))
+  .refine(val => !isNaN(val), { message: 'Amount must be a valid number' });
 
 export const UpdateTransSchema = z.object({
-  name: z.string().min(1, { message: "Name must be filled" }),
+  name: z.string().min(1, { message: 'Name must be filled' }),
   amount: stringOrNumberAsNumber,
-  date: z.string().min(1, { message: "Date must be filled" }),
+  date: z.string().min(1, { message: 'Date must be filled' }),
   categories: z
     .array(CategorySchema)
-    .min(1, { message: "At least one category is required" }),
+    .min(1, { message: 'At least one category is required' })
+    .max(2, { message: 'Maximum two categories allowed' }),
   notes: z.string().optional(),
+  counterparty: z.string().optional(),
+  account: z.string().optional(),
+  paymentType: z.string().optional(),
   id: z.string(),
 });
 

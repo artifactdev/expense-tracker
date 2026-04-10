@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 
 import { DoubleArrowLeftIcon, DoubleArrowRightIcon } from '@radix-ui/react-icons';
 import {
@@ -17,6 +17,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { DateRange } from 'react-day-picker';
 
+import { TransactionDetailSheet } from '@/components/modal/transactions/transaction-detail-sheet';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
@@ -74,6 +75,7 @@ export const TransactionsTable = <TData,>({
   viewport,
 }: DataTableProps<TData>) => {
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
+  const [detailTransaction, setDetailTransaction] = useState<TransactionObjBack | null>(null);
   const { fetchPetition } = useFetch();
   const router = useRouter();
   const pathname = usePathname();
@@ -132,7 +134,19 @@ export const TransactionsTable = <TData,>({
       },
       {
         accessorKey: 'name',
-        header: 'NAME',
+        header: 'BETREFF',
+      },
+      {
+        accessorKey: 'counterparty',
+        header: 'GEGENPARTEI',
+        cell: ({ getValue }) => {
+          const value = getValue() as string | undefined;
+          return value ? (
+            <span className='text-sm'>{value}</span>
+          ) : (
+            <span className='text-xs text-muted-foreground'>—</span>
+          );
+        },
       },
       {
         accessorKey: 'amount',
@@ -141,12 +155,12 @@ export const TransactionsTable = <TData,>({
       },
       {
         accessorKey: 'date',
-        header: 'DATE',
+        header: 'DATUM',
         cell: ({ getValue }) => <DateCell date={getValue() as string} />,
       },
       {
         accessorKey: 'account',
-        header: 'ACCOUNT',
+        header: 'KONTO',
         cell: ({ getValue }) => {
           const value = getValue() as string | undefined;
           return value ? (
@@ -163,7 +177,7 @@ export const TransactionsTable = <TData,>({
       },
       {
         accessorKey: 'categories',
-        header: 'CATEGORIES',
+        header: 'KATEGORIEN',
         cell: ({ getValue }) => {
           const categories = getValue() as Category[];
           return (
@@ -186,7 +200,7 @@ export const TransactionsTable = <TData,>({
       },
       {
         accessorKey: 'notes',
-        header: 'NOTES',
+        header: 'NOTIZEN',
       },
       {
         id: 'actions',
@@ -340,6 +354,13 @@ export const TransactionsTable = <TData,>({
 
   return (
     <>
+      <TransactionDetailSheet
+        transaction={detailTransaction}
+        open={!!detailTransaction}
+        onOpenChange={open => {
+          if (!open) setDetailTransaction(null);
+        }}
+      />
       <div className='overflow-x-auto pb-1'>
         <FilterInputs
           date={date}
@@ -369,9 +390,24 @@ export const TransactionsTable = <TData,>({
           <TableBody>
             {table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map(row => (
-                <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && 'selected'}
+                  className='cursor-pointer'
+                  onClick={() =>
+                    setDetailTransaction(row.original as unknown as TransactionObjBack)
+                  }
+                >
                   {row.getVisibleCells().map(cell => (
-                    <TableCell key={cell.id}>
+                    <TableCell
+                      key={cell.id}
+                      onClick={e => {
+                        // Prevent detail sheet from opening when clicking checkbox or actions
+                        if (cell.column.id === 'select' || cell.column.id === 'actions') {
+                          e.stopPropagation();
+                        }
+                      }}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}

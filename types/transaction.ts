@@ -15,6 +15,7 @@ export interface TransactionObj {
   notes?: string;
   counterparty?: string;
   account?: string;
+  paymentType?: string;
 }
 
 export type TransactionObjBack = TransactionObj & {
@@ -39,6 +40,7 @@ export interface TransactionBulk {
   CreditDebit?: string;
   Counterparty?: string;
   Account?: string;
+  PaymentType?: string;
   Notes?: string;
   selectedCategories?: EnhancedCategory[];
 }
@@ -63,6 +65,7 @@ export interface TransactionEndpointBody {
   notes?: string;
   counterparty?: string;
   account?: string;
+  paymentType?: string;
 }
 
 export interface TransactionBulkResponse {

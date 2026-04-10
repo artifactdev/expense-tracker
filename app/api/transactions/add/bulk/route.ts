@@ -64,6 +64,7 @@ export const POST = async (req: NextRequest) => {
           notes: trans.notes ?? null,
           counterparty: trans.counterparty ?? null,
           account: trans.account ?? null,
+          paymentType: trans.paymentType ?? null,
           userId: LOCAL_USER_ID,
           categories: { create: categoryIds.map(id => ({ categoryId: id })) },
         },

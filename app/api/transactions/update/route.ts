@@ -52,7 +52,9 @@ export const POST = async (req: NextRequest) => {
         where: { id },
         data: {
           ...transactionData,
-          categories: { create: processedCategoryIds.map(cid => ({ categoryId: cid })) },
+          categories: {
+            create: processedCategoryIds.slice(0, 2).map(cid => ({ categoryId: cid })),
+          },
         },
         include: { categories: { include: { category: true } } },
       });

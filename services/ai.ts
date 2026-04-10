@@ -73,7 +73,52 @@ const callChatCompletion = async (
 };
 
 // ---------------------------------------------------------------------------
-// Suggest categories for a transaction
+// Build a compact category tree string for AI prompts
+// ---------------------------------------------------------------------------
+
+export type CategoryTreeItem = {
+  id: string;
+  name: string;
+  parentId: string | null;
+  children?: CategoryTreeItem[];
+};
+
+export const buildCategoryTree = (
+  flatCategories: { id: string; name: string; parentId: string | null }[]
+): CategoryTreeItem[] => {
+  const parentCats = flatCategories.filter(c => !c.parentId);
+  const childCats = flatCategories.filter(c => c.parentId);
+  return parentCats.map(parent => ({
+    ...parent,
+    children: childCats.filter(c => c.parentId === parent.id),
+  }));
+};
+
+export const formatCategoryTreeForPrompt = (tree: CategoryTreeItem[]): string => {
+  return tree
+    .map(parent => {
+      const children = parent.children?.map(c => c.name).join(', ') ?? '';
+      return children ? `${parent.name}: ${children}` : parent.name;
+    })
+    .join('\n');
+};
+
+// ---------------------------------------------------------------------------
+// Base system prompt for categorization
+// ---------------------------------------------------------------------------
+
+const BASE_SYSTEM_PROMPT = `You are a personal finance assistant. You assign spending categories to bank transactions.
+The categories are organized as: Parent > Child.
+
+Rules:
+- Return ["Parent", "Child"] when a fitting subcategory exists.
+- Return ["Parent"] when only the parent category fits and no subcategory is appropriate.
+- Categories describe WHAT was bought/spent, NOT who was paid. Never use payment providers (PayPal, Stripe, Klarna), retailers (Amazon, eBay, Zalando), or bank names.
+- ALWAYS use categories from the provided tree. Only invent a name if nothing fits at all.
+- NEVER return vague categories like "Sonstige", "Generic", "Other".`;
+
+// ---------------------------------------------------------------------------
+// Suggest categories for a single transaction
 // ---------------------------------------------------------------------------
 
 export type CategorySuggestionResult = {
@@ -83,57 +128,120 @@ export type CategorySuggestionResult = {
 export const suggestCategories = async (
   transactionName: string,
   amount: number,
-  existingCategories: string[],
+  categoryTree: string,
   counterparty?: string,
   notes?: string
 ): Promise<CategorySuggestionResult | null> => {
   const settings = await getAISettings();
   if (!settings.aiEnabled || !settings.aiEndpoint || !settings.aiModel) return null;
 
-  const baseSystemPrompt = `You are a personal finance assistant. Your job is to assign categories to bank transactions.
-Rules:
-- ALWAYS prefer categories from the provided list. Only invent a new category name if none of the existing ones is even remotely suitable.
-- NEVER return vague or meaningless categories like "Generic", "Other", "Miscellaneous", or "Unknown".
-- Base your decision primarily on the payee/counterparty name and the transaction description, not just the amount.
-- Return a JSON array of strings with 1–3 category names. Nothing else.
-Example: ["Groceries", "Food"]`;
-
   const systemPrompt = settings.aiSystemPrompt
-    ? `${settings.aiSystemPrompt}\n\n${baseSystemPrompt}`
-    : baseSystemPrompt;
+    ? `${settings.aiSystemPrompt}\n\n${BASE_SYSTEM_PROMPT}`
+    : BASE_SYSTEM_PROMPT;
 
   const lines: string[] = [];
   if (counterparty) lines.push(`Payee/Counterparty: "${counterparty}"`);
-  lines.push(`Transaction description: "${transactionName}"`);
+  lines.push(`Transaction: "${transactionName}"`);
   lines.push(`Amount: ${amount} (negative = expense, positive = income)`);
   if (notes) lines.push(`Notes: "${notes}"`);
-  lines.push(
-    `Available categories: ${existingCategories.length > 0 ? existingCategories.join(', ') : 'none yet'}`
-  );
-  lines.push(`\nReturn a JSON array with 1–3 category names from the list above.`);
-  const userPrompt = lines.join('\n');
+  lines.push(`\nCategory tree:\n${categoryTree}`);
+  lines.push(`\nReturn a JSON array: ["Parent", "Child"] or ["Parent"]. Nothing else.`);
 
   const raw = await callChatCompletion(settings, [
     { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt },
+    { role: 'user', content: lines.join('\n') },
   ]);
 
   if (!raw) return { suggestions: [] };
 
-  // Strip reasoning blocks emitted by thinking models (e.g. Qwen, DeepSeek)
+  return { suggestions: parseAICategoryResponse(raw) };
+};
+
+// ---------------------------------------------------------------------------
+// Batch: suggest categories for multiple transactions in one API call
+// ---------------------------------------------------------------------------
+
+export type BatchTransaction = {
+  idx: number;
+  name: string;
+  amount: number;
+  counterparty?: string | null;
+  notes?: string | null;
+};
+
+export type BatchResult = Record<number, string[]>;
+
+export const suggestCategoriesBatch = async (
+  transactions: BatchTransaction[],
+  categoryTree: string,
+  settings?: AISettings
+): Promise<BatchResult | null> => {
+  const s = settings ?? (await getAISettings());
+  if (!s.aiEnabled || !s.aiEndpoint || !s.aiModel) return null;
+
+  const systemPrompt = s.aiSystemPrompt
+    ? `${s.aiSystemPrompt}\n\n${BASE_SYSTEM_PROMPT}`
+    : BASE_SYSTEM_PROMPT;
+
+  const txLines = transactions
+    .map(tx => {
+      const parts = [`#${tx.idx}`];
+      if (tx.counterparty) parts.push(`Payee: "${tx.counterparty}"`);
+      parts.push(`"${tx.name}"`);
+      parts.push(`${tx.amount}`);
+      if (tx.notes) parts.push(`Notes: "${tx.notes}"`);
+      return parts.join(' | ');
+    })
+    .join('\n');
+
+  const userPrompt = `Category tree:\n${categoryTree}\n\nTransactions (# | Payee | Description | Amount):\n${txLines}\n\nReturn a JSON object mapping each # to its categories: { "1": ["Parent", "Child"], "2": ["Parent"], ... }. Nothing else.`;
+
+  const raw = await callChatCompletion(s, [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ]);
+
+  if (!raw) return {};
+
   const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
   try {
-    // Greedy match: find the LAST [...] array in the response
+    const match = cleaned.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(match ? match[0] : cleaned);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      const result: BatchResult = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        const idx = parseInt(key, 10);
+        if (!isNaN(idx) && Array.isArray(value)) {
+          result[idx] = (value as unknown[])
+            .filter((s): s is string => typeof s === 'string')
+            .slice(0, 2);
+        }
+      }
+      return result;
+    }
+  } catch {
+    // non-parseable
+  }
+  return {};
+};
+
+// ---------------------------------------------------------------------------
+// Parse AI response for single-tx category suggestion
+// ---------------------------------------------------------------------------
+
+const parseAICategoryResponse = (raw: string): string[] => {
+  const cleaned = raw.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+  try {
     const match = cleaned.match(/\[[\s\S]*\]/);
     const parsed = JSON.parse(match ? match[0] : cleaned);
     if (Array.isArray(parsed)) {
-      return { suggestions: parsed.filter((s): s is string => typeof s === 'string').slice(0, 3) };
+      return parsed.filter((s): s is string => typeof s === 'string').slice(0, 2);
     }
   } catch {
-    // non-parseable response
+    // non-parseable
   }
-  return { suggestions: [] };
+  return [];
 };
 
 // ---------------------------------------------------------------------------
@@ -183,7 +291,7 @@ Respond only with a valid JSON array matching the input order. Each element: { "
   if (!raw) return null;
 
   try {
-    const match = raw.match(/\[.*\]/s);
+    const match = raw.match(/\[[\s\S]*\]/);
     const parsed = JSON.parse(match ? match[0] : raw) as Array<{
       confidence: number;
       notes: string;

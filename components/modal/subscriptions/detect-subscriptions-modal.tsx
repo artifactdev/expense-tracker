@@ -65,17 +65,58 @@ export const DetectSubscriptionsModal: React.FC<DetectSubscriptionsModalProps> =
     setCandidates([]);
     setSelected(new Set());
     try {
+      // Phase 1: fast algorithmic detection
       const res = await fetch(URL_DETECT_SUBSCRIPTIONS);
       const data: { ok: boolean; candidates?: EnrichedCandidate[] } = await res.json();
-      if (data.ok && data.candidates) {
+      if (data.ok && data.candidates && data.candidates.length > 0) {
         setCandidates(data.candidates);
-        // Pre-select high-confidence candidates
-        const preSelected = new Set(
-          data.candidates
-            .filter(c => c.aiConfidence === null || c.aiConfidence >= 0.7)
-            .map(c => c.normalizedName)
-        );
-        setSelected(preSelected);
+        // Pre-select all algorithmic candidates initially
+        setSelected(new Set(data.candidates.map(c => c.normalizedName)));
+        setIsDetecting(false);
+
+        // Phase 2: AI enrichment in background (non-blocking)
+        try {
+          const aiRes = await fetch(URL_DETECT_SUBSCRIPTIONS, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              candidates: data.candidates.map(c => ({
+                name: c.name,
+                amount: c.amount,
+                billingPeriod: c.billingPeriod,
+                occurrences: c.occurrences,
+              })),
+            }),
+          });
+          const aiData: {
+            ok: boolean;
+            enriched?: { aiConfidence: number | null; aiNotes: string | null }[];
+          } = await aiRes.json();
+          if (aiData.ok && aiData.enriched) {
+            setCandidates(prev =>
+              prev.map((c, i) => ({
+                ...c,
+                aiConfidence: aiData.enriched![i]?.aiConfidence ?? null,
+                aiNotes: aiData.enriched![i]?.aiNotes ?? null,
+              }))
+            );
+            // Deselect low-confidence candidates after AI enrichment
+            setSelected(prev => {
+              const next = new Set(prev);
+              data.candidates!.forEach((c, i) => {
+                const conf = aiData.enriched![i]?.aiConfidence;
+                if (conf !== null && conf !== undefined && conf < 0.5) {
+                  next.delete(c.normalizedName);
+                }
+              });
+              return next;
+            });
+          }
+        } catch {
+          // AI enrichment failed silently — algorithmic results stay
+        }
+      } else {
+        setIsDetecting(false);
       }
     } catch {
       toast({
@@ -83,7 +124,6 @@ export const DetectSubscriptionsModal: React.FC<DetectSubscriptionsModalProps> =
         description: 'Could not analyze transactions. Please try again.',
         variant: 'destructive',
       });
-    } finally {
       setIsDetecting(false);
     }
   };
@@ -102,26 +142,28 @@ export const DetectSubscriptionsModal: React.FC<DetectSubscriptionsModalProps> =
     if (toAdd.length === 0) return;
     setIsAdding(true);
 
-    let added = 0;
-    for (const c of toAdd) {
-      const res = await fetchPetition<UserSubscriptionResponse>({
-        url: URL_ADD_SUBSCRIPTION,
-        method: 'POST',
-        body: {
-          subscriptionData: {
-            name: c.name,
-            price: c.amount,
-            startDate: c.lastDate,
-            billingPeriod: c.billingPeriod as BillingPeriod,
-            autoRenew: true,
-            notify: false,
-            status: SubscriptionStatus.Active,
-            notes: c.aiNotes ?? undefined,
+    const results = await Promise.allSettled(
+      toAdd.map(c =>
+        fetchPetition<UserSubscriptionResponse>({
+          url: URL_ADD_SUBSCRIPTION,
+          method: 'POST',
+          body: {
+            subscriptionData: {
+              name: c.name,
+              price: c.amount,
+              startDate: c.lastDate,
+              billingPeriod: c.billingPeriod as BillingPeriod,
+              autoRenew: true,
+              notify: false,
+              status: SubscriptionStatus.Active,
+              notes: c.aiNotes ?? undefined,
+            },
           },
-        },
-      });
-      if (res.updatedUser) added++;
-    }
+        })
+      )
+    );
+
+    const added = results.filter(r => r.status === 'fulfilled' && r.value.updatedUser).length;
 
     toast({
       title: 'Subscriptions added',
@@ -154,8 +196,8 @@ export const DetectSubscriptionsModal: React.FC<DetectSubscriptionsModalProps> =
             detection.
           </p>
         ) : (
-          <ScrollArea className='max-h-[420px]'>
-            <div className='space-y-2 pr-2'>
+          <ScrollArea className='h-[min(420px,50vh)]'>
+            <div className='space-y-2 pr-3'>
               {candidates.map(c => {
                 const conf = confidenceLabel(c.aiConfidence);
                 const isChecked = selected.has(c.normalizedName);
@@ -194,7 +236,7 @@ export const DetectSubscriptionsModal: React.FC<DetectSubscriptionsModalProps> =
         )}
 
         {!isDetecting && candidates.length > 0 && (
-          <div className='flex items-center justify-between gap-2 pt-2'>
+          <div className='flex shrink-0 items-center justify-between gap-2 border-t pt-3'>
             <Button variant='outline' onClick={handleDetect} disabled={isDetecting || isAdding}>
               Re-scan
             </Button>

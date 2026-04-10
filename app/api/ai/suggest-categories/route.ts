@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { prisma } from '@/lib/prisma';
-import { suggestCategories } from '@/services/ai';
+import { buildCategoryTree, formatCategoryTreeForPrompt, suggestCategories } from '@/services/ai';
 import { errorMessages, LOCAL_USER_ID } from '@/utils/const';
 
 export const POST = async (req: NextRequest) => {
@@ -17,15 +17,21 @@ export const POST = async (req: NextRequest) => {
     return NextResponse.json({ ok: false, error: errorMessages.missingData }, { status: 400 });
   }
 
-  // Load existing user category names for context
+  // Load user categories with hierarchy info
   const userCats = await prisma.userCategory.findMany({
     where: { userId: LOCAL_USER_ID },
     include: { category: true },
   });
-  const existingCategories = userCats.map(uc => uc.category.name);
+  const flatCats = userCats.map(uc => ({
+    id: uc.category.id,
+    name: uc.category.name,
+    parentId: uc.category.parentId,
+  }));
+  const tree = buildCategoryTree(flatCats);
+  const categoryTree = formatCategoryTreeForPrompt(tree);
 
   try {
-    const result = await suggestCategories(name, amount, existingCategories, counterparty, notes);
+    const result = await suggestCategories(name, amount, categoryTree, counterparty, notes);
     if (!result) {
       return NextResponse.json(
         { ok: false, error: errorMessages.aiNotConfigured },

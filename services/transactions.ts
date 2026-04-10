@@ -19,6 +19,9 @@ function mapTransaction(t: {
   amount: number;
   date: string;
   notes: string | null;
+  counterparty: string | null;
+  account: string | null;
+  paymentType: string | null;
   createdAt: Date;
   updatedAt: Date;
   categories: { category: { id: string; name: string; common: boolean } }[];
@@ -30,6 +33,9 @@ function mapTransaction(t: {
     amount: t.amount,
     date: t.date,
     notes: t.notes ?? undefined,
+    counterparty: t.counterparty ?? undefined,
+    account: t.account ?? undefined,
+    paymentType: t.paymentType ?? undefined,
     categories: t.categories.map(tc => ({
       id: tc.category.id,
       name: tc.category.name,
@@ -74,7 +80,6 @@ export const getFilteredTransactions = async ({
     filteredCategories,
   });
 
-   
   const where: Record<string, any> = { userId };
 
   if (startDate && endDate) {
@@ -214,7 +219,7 @@ export const updateSingleTransaction = async ({
       where: { id },
       data: {
         ...data,
-        categories: { create: processedCategoryIds.map(cid => ({ categoryId: cid })) },
+        categories: { create: processedCategoryIds.slice(0, 2).map(cid => ({ categoryId: cid })) },
       },
       include: { categories: { include: { category: true } } },
     });

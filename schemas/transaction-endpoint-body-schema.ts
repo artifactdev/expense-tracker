@@ -11,7 +11,7 @@ const TransactionEndpointBodySchema = z.object({
   name: z.string(),
   amount: z.number(),
   date: z.string(),
-  selectedCategories: z.array(CategorySchema),
+  selectedCategories: z.array(CategorySchema).max(2),
   notes: z.string().optional(),
   counterparty: z.string().optional(),
   account: z.string().optional(),

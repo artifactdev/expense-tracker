@@ -97,13 +97,6 @@ export const AddTransactionsTable = <TData, TValue>({
             const existing = userCategories.find(c => c.name.toLowerCase() === s.toLowerCase());
             return existing ?? { id: crypto.randomUUID(), name: s, newEntry: true };
           });
-          const current = trans.selectedCategories ?? [];
-          const merged = [
-            ...current,
-            ...suggested.filter(
-              s => !current.some(c => c.name.toLowerCase() === s.name.toLowerCase())
-            ),
-          ];
           // Add new categories to user categories pool
           suggested.forEach(s => {
             if (
@@ -113,7 +106,8 @@ export const AddTransactionsTable = <TData, TValue>({
               setUserCategories(prev => [...prev, s]);
             }
           });
-          updateTransactionCategories(trans.id, merged);
+          // AI returns [Parent, Child] — replace instead of merge
+          updateTransactionCategories(trans.id, suggested.slice(0, 2));
           successCount++;
         }
       } catch {
@@ -129,6 +123,7 @@ export const AddTransactionsTable = <TData, TValue>({
     setIsAICategorizing(false);
   };
 
+  // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable({
     data,
     columns,
@@ -150,13 +145,14 @@ export const AddTransactionsTable = <TData, TValue>({
         notes: trans.Notes,
         counterparty: trans.Counterparty,
         account: trans.Account,
+        paymentType: trans.PaymentType,
         selectedCategories:
           trans.selectedCategories && trans.selectedCategories.length > 0
             ? trans.selectedCategories
             : [
                 {
-                  id: process.env.GENERIC_ID ?? '',
-                  name: 'Generic',
+                  id: 'sonstige-ausgaben',
+                  name: 'Sonstige Ausgaben',
                   common: true,
                 },
               ],

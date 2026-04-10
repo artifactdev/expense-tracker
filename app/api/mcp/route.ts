@@ -49,16 +49,40 @@ const TOOLS = [
   {
     name: 'list_transactions',
     description:
-      'List transactions. Filters: startDate, endDate (yyyy-MM-dd), category (partial), type (income|expense), limit (default 50, max 500), offset.',
+      'List bank transactions with optional filters. Use this to answer questions like "what did I spend last month?", "show me recent transactions", "what did I pay to Amazon?". If no dates are given, defaults to the last 90 days. Returns id, name (description), counterparty (merchant), amount (negative=expense, positive=income), date, categories, account, notes.',
     inputSchema: {
       type: 'object',
       properties: {
-        startDate: { type: 'string' },
-        endDate: { type: 'string' },
-        category: { type: 'string' },
-        type: { type: 'string', enum: ['income', 'expense'] },
-        limit: { type: 'number', minimum: 1, maximum: 500 },
-        offset: { type: 'number', minimum: 0 },
+        startDate: { type: 'string', description: 'Start date yyyy-MM-dd. Default: 90 days ago.' },
+        endDate: { type: 'string', description: 'End date yyyy-MM-dd. Default: today.' },
+        category: { type: 'string', description: 'Filter by category name (partial match).' },
+        type: {
+          type: 'string',
+          enum: ['income', 'expense'],
+          description: 'Only income or only expenses.',
+        },
+        limit: {
+          type: 'number',
+          minimum: 1,
+          maximum: 500,
+          description: 'Max results (default 50).',
+        },
+        offset: { type: 'number', minimum: 0, description: 'Pagination offset.' },
+      },
+    },
+  },
+  {
+    name: 'get_balance',
+    description:
+      'Get overall financial overview: total income, total expenses, net balance, and per-category breakdown. Use this to answer questions like "how much money do I have?", "what is my balance?", "how much did I spend overall?", "show me my finances". Optionally filter by date range — defaults to all time.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        startDate: {
+          type: 'string',
+          description: 'Start date yyyy-MM-dd (optional, default: all time).',
+        },
+        endDate: { type: 'string', description: 'End date yyyy-MM-dd (optional, default: today).' },
       },
     },
   },
@@ -73,31 +97,39 @@ const TOOLS = [
   },
   {
     name: 'list_categories',
-    description: 'List all categories available to the user.',
+    description:
+      'List all spending categories the user has. Use to understand what categories exist before filtering transactions.',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'list_subscriptions',
-    description: 'List all subscriptions for the user.',
+    description: 'List all tracked subscriptions (recurring payments like Netflix, Spotify, etc.).',
     inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'get_spending_summary',
     description:
-      'Aggregated income/expense summary for a date range. groupBy: month | category | none.',
+      'Aggregated income/expense summary. Use this for questions like "how much did I spend per category?", "show me spending by month", "compare income vs expenses". Defaults to current calendar month if no dates given. groupBy: month | category | none.',
     inputSchema: {
       type: 'object',
       properties: {
-        startDate: { type: 'string' },
-        endDate: { type: 'string' },
-        groupBy: { type: 'string', enum: ['month', 'category', 'none'] },
+        startDate: {
+          type: 'string',
+          description: 'Start date yyyy-MM-dd. Default: first day of current month.',
+        },
+        endDate: { type: 'string', description: 'End date yyyy-MM-dd. Default: today.' },
+        groupBy: {
+          type: 'string',
+          enum: ['month', 'category', 'none'],
+          description: 'How to group results (default: category).',
+        },
       },
-      required: ['startDate', 'endDate'],
     },
   },
   {
     name: 'get_subscription_costs',
-    description: 'Calculate total projected subscription costs (monthly and annually).',
+    description:
+      'Calculate total projected subscription costs (monthly and annually). Use to answer "how much do I pay for subscriptions?".',
     inputSchema: { type: 'object', properties: {} },
   },
 ];
@@ -108,32 +140,38 @@ const TOOLS = [
 type ToolArgs = Record<string, unknown>;
 
 async function callTool(toolName: string, args: ToolArgs): Promise<unknown> {
+  // Helper: yyyy-MM-dd for a Date object
+  const toDate = (d: Date) => d.toISOString().substring(0, 10);
+  const today = toDate(new Date());
+  const ninetyDaysAgo = toDate(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000));
+  const firstOfMonth = toDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+
   switch (toolName) {
     case 'list_transactions': {
-      const startDate = args.startDate as string | undefined;
-      const endDate = args.endDate as string | undefined;
+      const startDate = (args.startDate as string | undefined) ?? ninetyDaysAgo;
+      const endDate = (args.endDate as string | undefined) ?? today;
       const category = args.category as string | undefined;
       const type = args.type as 'income' | 'expense' | undefined;
       const limit = Math.min(Number(args.limit ?? 50), 500);
       const offset = Number(args.offset ?? 0);
 
-      const where: Record<string, unknown> = { userId: LOCAL_USER_ID };
-      if (startDate || endDate) {
-        where.date = {
-          ...(startDate ? { gte: startDate } : {}),
-          ...(endDate ? { lte: endDate } : {}),
-        };
-      }
+      const where: Record<string, unknown> = {
+        userId: LOCAL_USER_ID,
+        date: { gte: startDate, lte: endDate },
+      };
       if (type === 'income') where.amount = { gt: 0 };
       if (type === 'expense') where.amount = { lt: 0 };
 
-      const transactions = await prisma.transaction.findMany({
-        where,
-        orderBy: { date: 'desc' },
-        take: limit,
-        skip: offset,
-        include: { categories: { include: { category: { select: { name: true } } } } },
-      });
+      const [totalCount, transactions] = await Promise.all([
+        prisma.transaction.count({ where }),
+        prisma.transaction.findMany({
+          where,
+          orderBy: { date: 'desc' },
+          take: limit,
+          skip: offset,
+          include: { categories: { include: { category: { select: { name: true } } } } },
+        }),
+      ]);
 
       const filtered = category
         ? transactions.filter(t =>
@@ -143,16 +181,66 @@ async function callTool(toolName: string, args: ToolArgs): Promise<unknown> {
           )
         : transactions;
 
-      return filtered.map(t => ({
-        id: t.id,
-        name: t.name,
-        amount: t.amount,
-        date: t.date,
-        notes: t.notes,
-        counterparty: t.counterparty,
-        account: t.account,
-        categories: t.categories.map(c => c.category.name),
-      }));
+      return {
+        period: { startDate, endDate },
+        totalCount,
+        returnedCount: filtered.length,
+        transactions: filtered.map(t => ({
+          id: t.id,
+          name: t.name,
+          amount: t.amount,
+          date: t.date,
+          notes: t.notes,
+          counterparty: t.counterparty,
+          account: t.account,
+          categories: t.categories.map(c => c.category.name),
+        })),
+      };
+    }
+
+    case 'get_balance': {
+      const startDate = args.startDate as string | undefined;
+      const endDate = (args.endDate as string | undefined) ?? today;
+
+      const where: Record<string, unknown> = { userId: LOCAL_USER_ID };
+      if (startDate || endDate) {
+        where.date = {
+          ...(startDate ? { gte: startDate } : {}),
+          lte: endDate,
+        };
+      }
+
+      const transactions = await prisma.transaction.findMany({
+        where,
+        include: { categories: { include: { category: { select: { name: true } } } } },
+      });
+
+      const totalIncome = transactions.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+      const totalExpenses = transactions
+        .filter(t => t.amount < 0)
+        .reduce((s, t) => s + t.amount, 0);
+
+      const byCat: Record<string, number> = {};
+      for (const t of transactions.filter(t => t.amount < 0)) {
+        const cats =
+          t.categories.length > 0 ? t.categories.map(c => c.category.name) : ['Uncategorized'];
+        for (const cat of cats) {
+          byCat[cat] = (byCat[cat] ?? 0) + Math.abs(t.amount);
+        }
+      }
+      const topCategories = Object.entries(byCat)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([name, amount]) => ({ name, amount: Math.round(amount * 100) / 100 }));
+
+      return {
+        period: startDate ? { startDate, endDate } : 'all time',
+        totalIncome: Math.round(totalIncome * 100) / 100,
+        totalExpenses: Math.round(Math.abs(totalExpenses) * 100) / 100,
+        net: Math.round((totalIncome + totalExpenses) * 100) / 100,
+        transactionCount: transactions.length,
+        topExpenseCategories: topCategories,
+      };
     }
 
     case 'get_transaction_by_id': {
@@ -219,9 +307,9 @@ async function callTool(toolName: string, args: ToolArgs): Promise<unknown> {
     }
 
     case 'get_spending_summary': {
-      const startDate = args.startDate as string;
-      const endDate = args.endDate as string;
-      const groupBy = (args.groupBy as string | undefined) ?? 'none';
+      const startDate = (args.startDate as string | undefined) ?? firstOfMonth;
+      const endDate = (args.endDate as string | undefined) ?? today;
+      const groupBy = (args.groupBy as string | undefined) ?? 'category';
 
       const transactions = await prisma.transaction.findMany({
         where: { userId: LOCAL_USER_ID, date: { gte: startDate, lte: endDate } },
@@ -313,8 +401,15 @@ async function callTool(toolName: string, args: ToolArgs): Promise<unknown> {
 // ---------------------------------------------------------------------------
 // MCP JSON-RPC dispatcher
 // ---------------------------------------------------------------------------
-async function handleJsonRpc(req: JsonRpcRequest): Promise<JsonRpcResponse> {
+async function handleJsonRpc(req: JsonRpcRequest): Promise<JsonRpcResponse | null> {
   const { id, method, params } = req;
+
+  // Notifications (no id) must not produce a response
+  if (id === undefined || id === null) {
+    // handle known notification side-effects silently
+    return null;
+  }
+
   try {
     switch (method) {
       case 'initialize':
@@ -322,9 +417,9 @@ async function handleJsonRpc(req: JsonRpcRequest): Promise<JsonRpcResponse> {
           protocolVersion: '2025-03-26',
           capabilities: { tools: {} },
           serverInfo: { name: 'expense-tracker-mcp', version: '1.0.0' },
+          instructions:
+            'Expense Tracker MCP — read-only access to bank transactions, categories, subscriptions, and spending summaries. Use get_balance for overall financial overviews and list_transactions for filtering/searching. All amounts are in EUR; negative = expense, positive = income.',
         });
-      case 'notifications/initialized':
-        return ok(id, {});
       case 'ping':
         return ok(id, {});
       case 'tools/list':
@@ -356,27 +451,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { status: 400 }
     );
   }
+
   if (Array.isArray(body)) {
-    const responses = await Promise.all(body.map(r => handleJsonRpc(r as JsonRpcRequest)));
+    const all = await Promise.all(body.map(r => handleJsonRpc(r as JsonRpcRequest)));
+    // Filter out null (notifications don't produce a response)
+    const responses = all.filter((r): r is JsonRpcResponse => r !== null);
+    if (responses.length === 0) {
+      // All items were notifications – spec says return 202 Accepted
+      return new NextResponse(null, { status: 202 });
+    }
     return NextResponse.json(responses);
   }
-  return NextResponse.json(await handleJsonRpc(body as JsonRpcRequest));
+
+  const response = await handleJsonRpc(body as JsonRpcRequest);
+  if (response === null) {
+    // Single notification – no response body
+    return new NextResponse(null, { status: 202 });
+  }
+  return NextResponse.json(response);
 }
 
 export async function GET(): Promise<NextResponse> {
-  return NextResponse.json({
-    name: 'expense-tracker-mcp',
-    version: '1.0.0',
-    protocol: 'MCP 2025-03-26',
-    transport: 'HTTP POST to /api/mcp',
-    tools: TOOLS.map(t => ({ name: t.name, description: t.description })),
-    configExample: {
-      mcpServers: {
-        'expense-tracker': {
-          url: 'http://localhost:3000/api/mcp',
-          transport: { type: 'http' },
-        },
-      },
-    },
+  // MCP Streamable HTTP spec: GET is for opening an SSE stream for
+  // server-initiated messages.  This server is stateless (no session
+  // management), so we don't support SSE streaming.  Return 405 per spec.
+  return new NextResponse(null, {
+    status: 405,
+    headers: { Allow: 'POST' },
   });
 }

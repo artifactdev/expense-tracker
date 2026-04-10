@@ -1,0 +1,12 @@
+{
+	"mcpServers": {
+		"expense-tracker": {
+			"url": "http://localhost:3000/api/mcp",
+			"transport": {
+				"type": "http"
+			},
+			"disabled": false,
+			"alwaysAllow": []
+		}
+	}
+}

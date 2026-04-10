@@ -112,8 +112,12 @@ export const FIELDS_FROM_CSV = [
   'CreditDebit',
   'Counterparty',
   'Account',
+  'PaymentType',
   'Notes',
 ];
+
+// Fields that allow mapping multiple CSV columns (values get concatenated)
+export const MULTI_COLUMN_FIELDS = new Set(['Concept', 'Counterparty']);
 
 // Keywords für Auto-Detect: Spaltenname (lowercase) → Feld
 export const CSV_COLUMN_AUTODETECT: Record<string, string> = {
@@ -124,6 +128,7 @@ export const CSV_COLUMN_AUTODETECT: Record<string, string> = {
   date: 'Date',
   datum: 'Date',
   buchungsdatum: 'Date',
+  wertstellungsdatum: 'Date',
   // Concept / Betreff
   rmtinf: 'Concept',
   bookingtxt: 'Concept',
@@ -133,6 +138,7 @@ export const CSV_COLUMN_AUTODETECT: Record<string, string> = {
   memo: 'Concept',
   betreff: 'Concept',
   verwendungszweck: 'Concept',
+  buchungstext: 'Concept',
   // Amount
   amt: 'Amount',
   amount: 'Amount',
@@ -142,23 +148,34 @@ export const CSV_COLUMN_AUTODETECT: Record<string, string> = {
   creditdebit: 'CreditDebit',
   cdtdbt: 'CreditDebit',
   type: 'CreditDebit',
+  'soll/haben': 'CreditDebit',
   // Counterparty
   rmtdnm: 'Counterparty',
+  rmtdultmtnm: 'Counterparty',
   counterparty: 'Counterparty',
   gegenseite: 'Counterparty',
   auftraggeber: 'Counterparty',
   empfaenger: 'Counterparty',
   beguenstigter: 'Counterparty',
+  'name zahlungsbeteiligter': 'Counterparty',
   // Account
   owneracctiban: 'Account',
   owneracctno: 'Account',
   account: 'Account',
   konto: 'Account',
   iban: 'Account',
+  kontonummer: 'Account',
+  auftragskonto: 'Account',
+  // PaymentType
+  paymenttype: 'PaymentType',
+  zahlungsart: 'PaymentType',
+  buchungsart: 'PaymentType',
+  transaktionstyp: 'PaymentType',
   // Notes
   notes: 'Notes',
   notizen: 'Notes',
   category: 'Notes',
+  kundenreferenz: 'Notes',
 };
 
 export const formatterUSTwoDecimals = new Intl.NumberFormat('en-US', {

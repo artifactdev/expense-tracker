@@ -1,146 +1,150 @@
-import type { EnhancedCategory } from "@/types";
+import type { EnhancedCategory } from '@/types';
 
-const categoryKeywordsMapping = {
-  Market: {
-    id: process.env.MARKET_ID ?? "",
-    name: [
-      "carrefour",
-      "gadis",
-      "ga.co",
-      "lidl",
-      "eroski",
-      "alcampo",
-      "mercadona",
-      "frutas",
-      "fruteria",
-      "comesticos",
-      "ikea",
+// Keyword → [Parent, Child?] mapping for quick CSV categorization
+const categoryKeywordsMapping: Record<string, { parentName: string; keywords: string[] }> = {
+  // Wohnen
+  Miete: { parentName: 'Wohnen', keywords: ['miete', 'kaltmiete', 'warmmiete'] },
+  Nebenkosten: {
+    parentName: 'Wohnen',
+    keywords: ['nebenkosten', 'strom', 'heizung', 'stadtwerke', 'gas abschlag'],
+  },
+
+  // Lebensmittel
+  Supermarkt: {
+    parentName: 'Lebensmittel',
+    keywords: [
+      'rewe',
+      'edeka',
+      'aldi',
+      'lidl',
+      'penny',
+      'netto',
+      'kaufland',
+      'dm-drogerie',
+      'rossmann',
+      'carrefour',
+      'gadis',
+      'eroski',
+      'alcampo',
+      'mercadona',
+      'ikea',
     ],
-    common: true,
   },
-  Clothing: {
-    id: process.env.CLOTHING_ID ?? "",
-    name: [
-      "primark",
-      "lefties",
-      "decimas",
-      "nike",
-      "skechers",
-      "puma",
-      "polinesia",
-      "inside c.c.",
-      "pull and bear",
-    ],
-    common: true,
-  },
-  Electronics: {
-    id: process.env.ELECTRONICS_ID ?? "",
-    name: [
-      "media markt",
-      "coolmod",
-      "pccomponentes",
-      "marketplace pccom",
-      "versus gamers",
-      "pc componentes",
-    ],
-    common: true,
-  },
-  Sports: {
-    id: process.env.SPORTS_ID ?? "",
-    name: ["decathlon", "prozis", "deportes"],
-    common: true,
-  },
-  Amazon: {
-    id: process.env.AMAZON_ID ?? "",
-    name: ["amzn", "amazon", "amz*"],
-    common: true,
-  },
-  Aliexpress: {
-    id: "aliexpress",
-    name: ["aliexpress"],
-    newEntry: true,
-  },
-  Paypal: { id: process.env.PAYPAL_ID ?? "", name: ["paypal"], common: true },
-  "Tobacco Shop": {
-    id: "tobacco shop",
-    name: ["estanco", "expendeduria 41", "expendeduria 54", "expend.150050"],
-    newEntry: true,
-  },
-  Gas: {
-    id: "gas",
-    name: ["carbugal"],
-    newEntry: true,
-  },
-  Insurances: { id: "insurances", name: ["seguros"], newEntry: true },
-  Paro: {
-    id: "paro",
-    name: ["servicio publico de empleo estatal"],
-    newEntry: true,
-  },
-  Podiatrist: {
-    id: "podiatrist",
-    name: [
-      "alma cl.san rosendo",
-      "clin.podologica",
-      "clinica maquieira",
-      "clinica honduras",
-      "podologia",
-    ],
-    newEntry: true,
-  },
-  Pharmacy: {
-    id: process.env.PHARMACY_ID ?? "",
-    name: ["farma", "farmacia"],
-    common: true,
-  },
-  ATM: { id: process.env.ATM_ID ?? "", name: ["reintegro"], common: true },
-  "Home delivery": {
-    id: process.env.HOME_DELIVERY_ID ?? "",
-    name: ["dominos", "telepizza", "glovoapp", "glovo"],
-    common: true,
-  },
-  Barber: { id: process.env.BARBER_ID ?? "", name: ["kaki"], common: true },
-  "Maintenance fees": {
-    id: "maintenance fees",
-    name: [
-      "comision administracion",
-      "servicio de mantenimiento",
-      "comisiones y gastos",
-    ],
-    newEntry: true,
-  },
-  Chatgpt: { id: "chatgpt", name: ["chatgpt"], newEntry: true },
-  Paycheck: {
-    id: process.env.PAYCHECK_ID ?? "",
-    name: [
-      "flat 101",
-      "ovixia",
-      "indra soluciones",
-      "team heretics",
-      "saski baskonia",
-      "arctic gaming",
-      "convergys",
-      "gamecore",
-    ],
-    common: true,
-  },
-  Oxygen: { id: "oxygen", name: ["factura"], newEntry: true },
-  Bizum: { id: "bizum", name: ["bizum"], newEntry: true },
-  Dentist: {
-    id: "dentist",
-    name: ["dental", "dentista", "sonrident"],
-    newEntry: true,
-  },
+  Tierfutter: { parentName: 'Lebensmittel', keywords: ['fressnapf', 'zooplus', 'zooroyal'] },
+
+  // Gastronomie
   Restaurants: {
-    id: process.env.RESTAURANTS_ID ?? "",
-    name: ["restaurant", "restaurante", "goiko"],
-    common: true,
+    parentName: 'Gastronomie',
+    keywords: ['restaurant', 'restaurante', 'goiko', 'mcdonalds', 'burger king', 'subway'],
   },
-  Physiotherapy: {
-    id: "physiotherapy",
-    name: ["physiotherapy, fisioterapia"],
-    newEntry: true,
+  Lieferdienste: {
+    parentName: 'Gastronomie',
+    keywords: ['lieferando', 'uber eats', 'dominos', 'telepizza', 'glovoapp', 'glovo'],
   },
+  Cafés: { parentName: 'Gastronomie', keywords: ['starbucks', 'cafe', 'kaffee'] },
+
+  // Mobilität
+  Tanken: {
+    parentName: 'Mobilität',
+    keywords: ['tankstelle', 'aral', 'shell', 'esso', 'total', 'jet ', 'carbugal'],
+  },
+  'Öffentliche Verkehrsmittel': {
+    parentName: 'Mobilität',
+    keywords: [
+      'db bahn',
+      'deutsche bahn',
+      'flixbus',
+      'oeffentl',
+      'nahverkehr',
+      'hvv',
+      'mvg',
+      'bvg',
+      'kvb',
+    ],
+  },
+
+  // Telefonie & Internet
+  'Streaming-Dienste': {
+    parentName: 'Telefonie & Internet',
+    keywords: ['netflix', 'spotify', 'disney+', 'prime video', 'youtube premium', 'dazn'],
+  },
+  'Cloud & Hosting': {
+    parentName: 'Telefonie & Internet',
+    keywords: ['icloud', 'dropbox', 'ionos', 'hetzner', 'aws '],
+  },
+  'Software & Apps': {
+    parentName: 'Telefonie & Internet',
+    keywords: ['github', 'chatgpt', 'openai', 'microsoft 365', 'adobe'],
+  },
+  Hardware: {
+    parentName: 'Telefonie & Internet',
+    keywords: ['media markt', 'saturn', 'coolmod', 'pccomponentes', 'cyberport', 'alternate'],
+  },
+
+  // Einkaufen
+  Kleidung: {
+    parentName: 'Einkaufen',
+    keywords: [
+      'zalando',
+      'h&m',
+      'primark',
+      'zara',
+      'about you',
+      'pull and bear',
+      'nike',
+      'adidas',
+      'puma',
+      'skechers',
+    ],
+  },
+  Elektronik: {
+    parentName: 'Einkaufen',
+    keywords: ['amazon', 'amzn', 'amz*', 'ebay', 'aliexpress'],
+  },
+  Geschenke: { parentName: 'Einkaufen', keywords: ['geschenk', 'gift'] },
+
+  // Gesundheit
+  Medikamente: { parentName: 'Gesundheit', keywords: ['apotheke', 'farmacia', 'pharma'] },
+  'Arzt & Zahnarzt': {
+    parentName: 'Gesundheit',
+    keywords: ['arzt', 'praxis', 'dental', 'dentist', 'zahnarzt'],
+  },
+  Physiotherapie: { parentName: 'Gesundheit', keywords: ['physiotherapie', 'physio', 'massage'] },
+
+  // Versicherungen
+  Haftpflicht: { parentName: 'Versicherungen', keywords: ['haftpflicht'] },
+  Krankenversicherung: {
+    parentName: 'Versicherungen',
+    keywords: ['krankenversicherung', 'krankenkasse', 'aok', 'tk versicherung', 'barmer'],
+  },
+
+  // Finanzen
+  Bankgebühren: {
+    parentName: 'Finanzen',
+    keywords: ['kontoführung', 'kontogebühr', 'comision', 'servicio de mantenimiento'],
+  },
+  Sparen: { parentName: 'Finanzen', keywords: ['sparbetrag', 'sparplan', 'tagesgeld'] },
+  Geldtransfers: { parentName: 'Finanzen', keywords: ['paypal', 'bizum'] },
+
+  // Freizeit & Unterhaltung
+  'Reisen & Urlaub': {
+    parentName: 'Freizeit & Unterhaltung',
+    keywords: ['booking.com', 'airbnb', 'hotel', 'flug'],
+  },
+  'Hobby & Sport': {
+    parentName: 'Freizeit & Unterhaltung',
+    keywords: ['decathlon', 'fitnessstudio', 'sportverein'],
+  },
+
+  // Spenden & Wohltätigkeit
+  Spenden: {
+    parentName: 'Spenden & Wohltätigkeit',
+    keywords: ['spende', 'grundeinkommen', 'donation'],
+  },
+
+  // Einnahmen
+  Gehalt: { parentName: 'Einnahmen', keywords: ['lohn', 'gehalt', 'entgelt', 'gehaltseingang'] },
+  Verkauf: { parentName: 'Einnahmen', keywords: ['verkauf', 'erstattung', 'rückerstattung'] },
 };
 
 // Checking into the values of the map, if there is a match, getting that
@@ -148,19 +152,28 @@ export const getTransactionsCategories = (concept: string) => {
   const conceptLower = concept.toLowerCase();
   const categories: EnhancedCategory[] = [];
 
-  Object.entries(categoryKeywordsMapping).forEach(
-    ([categoryName, categoryInfo]) => {
-      const keywordFound = categoryInfo.name.some((catInfo) =>
-        conceptLower.includes(catInfo),
-      );
-      if (keywordFound) {
+  for (const [childName, { parentName, keywords }] of Object.entries(categoryKeywordsMapping)) {
+    const keywordFound = keywords.some(kw => conceptLower.includes(kw));
+    if (keywordFound) {
+      // Add parent + child
+      if (!categories.some(c => c.name === parentName)) {
         categories.push({
-          ...categoryInfo,
-          name: categoryName,
+          id: parentName.toLowerCase().replace(/\s+/g, '-'),
+          name: parentName,
+          newEntry: true,
         });
       }
-    },
-  );
+      if (!categories.some(c => c.name === childName)) {
+        categories.push({
+          id: childName.toLowerCase().replace(/\s+/g, '-'),
+          name: childName,
+          newEntry: true,
+        });
+      }
+      // Max 2 categories (parent + child), first match wins
+      return categories.slice(0, 2);
+    }
+  }
 
   return categories.length > 0 ? categories : undefined;
 };

@@ -15,6 +15,8 @@ import { useFetch } from '@/hooks/use-fetch';
 import type { TransactionObjBack } from '@/types';
 import { dateFormat, URL_POST_TRANSACTION } from '@/utils/const';
 import { useToast } from '../../ui/use-toast';
+import type { CategoryNode } from '../utils/aggregate-transactions-per-categories';
+import { CategoryTiles } from './category-tiles';
 import { KpiBlock } from './kpi/kpi-block';
 import { UserMessage } from './user-message';
 
@@ -35,7 +37,16 @@ export const Dashboard = ({ viewport }: Props) => {
   const { fetchPetition } = useFetch();
   const { toast } = useToast();
 
-   
+  // Load category hierarchy
+  const { data: categories } = useQuery<CategoryNode[]>({
+    queryKey: ['/api/categories'],
+    queryFn: async () => {
+      const res = await fetch('/api/categories');
+      const json = await res.json();
+      return (json.categories ?? []).filter((c: CategoryNode) => !c.parentId);
+    },
+  });
+
   const fetchFilteredTransactions = async ({ queryKey }: { queryKey: any }) => {
     const [keyPath, { startDate, endDate }] = queryKey;
     const params = new URLSearchParams();
@@ -154,10 +165,19 @@ export const Dashboard = ({ viewport }: Props) => {
               <TransactionsPieChart
                 filteredData={filteredData}
                 isLoading={isLoading || initialLoading}
+                categories={categories}
               />
             </CardContent>
           </Card>
         </div>
+        {/* Dynamic category breakdown tiles */}
+        {categories && categories.length > 0 && (
+          <CategoryTiles
+            filteredData={filteredData}
+            categories={categories}
+            isLoading={isLoading || initialLoading}
+          />
+        )}
       </div>
     </ScrollArea>
   );

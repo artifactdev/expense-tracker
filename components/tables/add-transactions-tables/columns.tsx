@@ -40,6 +40,15 @@ export const columns: ColumnDef<TransactionBulk>[] = [
     ),
   },
   {
+    accessorKey: 'PaymentType',
+    header: 'TYPE',
+    cell: ({ getValue }) => (
+      <div className='min-w-[80px] max-w-[140px] truncate text-xs text-muted-foreground'>
+        {(getValue() as string) ?? '—'}
+      </div>
+    ),
+  },
+  {
     accessorKey: 'Categories',
     header: 'CATEGORIES',
     cell: ({ row }) => (

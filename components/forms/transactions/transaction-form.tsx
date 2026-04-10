@@ -66,6 +66,9 @@ export const TransactionForm = ({
     date: initData?.date,
     categories: initData?.categories ?? [],
     notes: initData?.notes ?? '',
+    counterparty: initData?.counterparty ?? '',
+    account: initData?.account ?? '',
+    paymentType: initData?.paymentType ?? '',
     id: initData?.id ?? 'new trans',
   };
 
@@ -88,26 +91,18 @@ export const TransactionForm = ({
         body: JSON.stringify({
           name,
           amount,
-          counterparty: form.getValues('counterparty' as keyof TransactionFormValue) as
-            | string
-            | undefined,
+          counterparty: form.getValues('counterparty'),
           notes: form.getValues('notes'),
         }),
       });
       const data: { ok: boolean; suggestions?: string[] } = await res.json();
       if (data.ok && data.suggestions && data.suggestions.length > 0) {
-        const currentCats = form.getValues('categories') as Categories[];
         const suggested: Categories[] = data.suggestions.map(s => {
           const existing = userCategories.find(c => c.name.toLowerCase() === s.toLowerCase());
           return existing ?? { id: crypto.randomUUID(), name: s, newEntry: true };
         });
-        const merged = [
-          ...currentCats,
-          ...suggested.filter(
-            s => !currentCats.some(c => c.name.toLowerCase() === s.name.toLowerCase())
-          ),
-        ];
-        form.setValue('categories', merged, { shouldDirty: true });
+        // AI returns [Parent, Child] — replace instead of merge
+        form.setValue('categories', suggested.slice(0, 2), { shouldDirty: true });
       }
     } finally {
       setAiLoading(false);
@@ -126,7 +121,7 @@ export const TransactionForm = ({
               <FormControl>
                 <Input
                   type='text'
-                  placeholder='Enter a name...'
+                  placeholder='Name eingeben...'
                   disabled={loading}
                   {...field}
                   onChange={e => {
@@ -147,7 +142,7 @@ export const TransactionForm = ({
               typeof field.value === 'string' ? new Date(field.value) : field.value;
             return (
               <FormItem className='flex flex-col'>
-                <FormLabel>Date</FormLabel>
+                <FormLabel>Datum</FormLabel>
                 <Popover>
                   <PopoverTrigger asChild>
                     <FormControl>
@@ -162,7 +157,7 @@ export const TransactionForm = ({
                         {field.value ? (
                           format(parsedDateValue, 'LLL dd, y')
                         ) : (
-                          <span>Pick a date</span>
+                          <span>Datum wählen</span>
                         )}
                       </Button>
                     </FormControl>
@@ -183,7 +178,7 @@ export const TransactionForm = ({
         />
         <FormItem>
           <div className='flex items-center justify-between'>
-            <FormLabel>Categories</FormLabel>
+            <FormLabel>Kategorien</FormLabel>
             {aiEnabled && (
               <Button
                 type='button'
@@ -220,12 +215,12 @@ export const TransactionForm = ({
           name='amount'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Amount</FormLabel>
+              <FormLabel>Betrag</FormLabel>
               <FormControl>
                 <Input
                   type='number'
                   step='0.01'
-                  placeholder='Enter an amount...'
+                  placeholder='Betrag eingeben...'
                   disabled={loading}
                   {...field}
                   onChange={e => {
@@ -244,11 +239,77 @@ export const TransactionForm = ({
           name='notes'
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Notes</FormLabel>
+              <FormLabel>Notizen</FormLabel>
               <FormControl>
                 <Input
                   type='text'
-                  placeholder='Notes...'
+                  placeholder='Notizen...'
+                  disabled={loading}
+                  {...field}
+                  onChange={e => {
+                    field.onChange(e);
+                    trigger(field.name);
+                  }}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='counterparty'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Gegenpartei</FormLabel>
+              <FormControl>
+                <Input
+                  type='text'
+                  placeholder='Gegenpartei...'
+                  disabled={loading}
+                  {...field}
+                  onChange={e => {
+                    field.onChange(e);
+                    trigger(field.name);
+                  }}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='account'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Konto</FormLabel>
+              <FormControl>
+                <Input
+                  type='text'
+                  placeholder='IBAN / Konto...'
+                  disabled={loading}
+                  {...field}
+                  onChange={e => {
+                    field.onChange(e);
+                    trigger(field.name);
+                  }}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name='paymentType'
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Zahlungsart</FormLabel>
+              <FormControl>
+                <Input
+                  type='text'
+                  placeholder='z.B. Lastschrift, Überweisung...'
                   disabled={loading}
                   {...field}
                   onChange={e => {

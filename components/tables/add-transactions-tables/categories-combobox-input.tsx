@@ -34,6 +34,7 @@ export const CategoriesComboboxInput = ({
       userCategories.map(category => ({
         value: category.id,
         label: category.name,
+        isChild: !!category.parentId,
       })),
     [userCategories]
   );
@@ -49,19 +50,39 @@ export const CategoriesComboboxInput = ({
     (catObj: { value: string; label: string }) => {
       const isAlreadySelected = selectedCategories.some(cat => cat.id === catObj.value);
 
-      let newSelectedCategories: EnhancedCategory[];
       if (isAlreadySelected) {
-        newSelectedCategories = selectedCategories.filter(cat => cat.id !== catObj.value);
+        const deselected = userCategories.find(c => c.id === catObj.value);
+        if (deselected?.parentId) {
+          // Deselecting a child: keep the parent
+          updateTransactionCategories(
+            selectedRow,
+            selectedCategories.filter(cat => cat.id !== catObj.value)
+          );
+        } else {
+          // Deselecting a parent: clear everything
+          updateTransactionCategories(selectedRow, []);
+        }
       } else {
         const categoryToAdd = userCategories.find(cat => cat.id === catObj.value);
-        if (categoryToAdd) {
-          newSelectedCategories = [...selectedCategories, categoryToAdd];
+        const toAdd: EnhancedCategory = categoryToAdd || {
+          id: catObj.value,
+          name: catObj.label,
+        };
+
+        // If the selected category has a parent, auto-add the parent
+        if (toAdd.parentId) {
+          const parent = userCategories.find(cat => cat.id === toAdd.parentId);
+          if (parent) {
+            updateTransactionCategories(selectedRow, [parent, toAdd]);
+          } else {
+            updateTransactionCategories(selectedRow, [toAdd]);
+          }
         } else {
-          newSelectedCategories = [...selectedCategories, { id: catObj.value, name: catObj.label }];
+          // Selecting a parent category: replace everything
+          updateTransactionCategories(selectedRow, [toAdd]);
         }
       }
-
-      updateTransactionCategories(selectedRow, newSelectedCategories);
+      setOpen(false);
     },
     [selectedCategories, updateTransactionCategories, selectedRow, userCategories]
   );
@@ -89,7 +110,7 @@ export const CategoriesComboboxInput = ({
       };
 
       updateUserCategories(newCat);
-      updateTransactionCategories(selectedRow, [...selectedCategories, newCat]);
+      updateTransactionCategories(selectedRow, [newCat]);
     }
 
     setCurrentInput('');
@@ -97,7 +118,6 @@ export const CategoriesComboboxInput = ({
     currentInput,
     userCategories,
     selectedRow,
-    selectedCategories,
     updateUserCategories,
     updateTransactionCategories,
     setCurrentInput,
@@ -113,11 +133,9 @@ export const CategoriesComboboxInput = ({
           aria-expanded={open}
           className={`${WIDTH} justify-between ${getEllipsed}`}
         >
-          {selectedCategories.length === 1
-            ? `${selectedCategories[0].name} selected`
-            : selectedCategories.length > 1
-              ? `${selectedCategories.length} categories`
-              : `Select categories...`}
+          {selectedCategories.length > 0
+            ? selectedCategories.map(c => c.name).join(' › ')
+            : `Select category...`}
           <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
         </Button>
       </PopoverTrigger>
@@ -131,7 +149,12 @@ export const CategoriesComboboxInput = ({
           <ScrollArea maxHeight={225}>
             <CommandGroup>
               {categories.map(cat => (
-                <CommandItem key={cat.value} value={cat.label} onSelect={() => handleSelect(cat)}>
+                <CommandItem
+                  key={cat.value}
+                  value={cat.label}
+                  onSelect={() => handleSelect(cat)}
+                  className={cat.isChild ? 'pl-8' : 'font-semibold'}
+                >
                   <Check
                     className={cn(
                       'mr-2 h-4 w-4',
