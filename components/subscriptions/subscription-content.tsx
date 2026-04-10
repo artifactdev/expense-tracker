@@ -3,18 +3,20 @@
 import { useEffect, useState } from 'react';
 
 import { useQuery } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
 
 import { Separator } from '@/components//ui/separator';
 import { CreateSubscriptionModal } from '@/components/modal/subscriptions/create-subscription-modal';
+import { DetectSubscriptionsModal } from '@/components/modal/subscriptions/detect-subscriptions-modal';
 import { SubscriptionCosts } from '@/components/subscriptions/subscription-costs';
 import { getSubscriptionCosts } from '@/components/subscriptions/utils/get-subscription-costs';
 import { Button } from '@/components/ui/button';
 import { Heading } from '@/components/ui/heading';
 import { useToast } from '@/components/ui/use-toast';
 import { useFetch } from '@/hooks/use-fetch';
+import type { AISettings } from '@/schemas/update-ai-settings-schema';
 import type { Subscription } from '@/types';
-import { URL_GET_SUBSCRIPTION } from '@/utils/const';
+import { URL_AI_SETTINGS, URL_GET_SUBSCRIPTION } from '@/utils/const';
 import { columns } from '../tables/subscriptions-tables/columns';
 import { SubscriptionTable } from '../tables/subscriptions-tables/subscription-table';
 import { LoadingSpinner } from '../ui/spinner';
@@ -27,8 +29,17 @@ interface ResponseSubscriptions {
 
 export const SubscriptionContent = () => {
   const [openCreateSubModal, setOpenCreateSubModal] = useState(false);
+  const [openDetectModal, setOpenDetectModal] = useState(false);
   const { fetchPetition } = useFetch();
   const { toast } = useToast();
+
+  const { data: aiSettings } = useQuery<AISettings>({
+    queryKey: [URL_AI_SETTINGS],
+    queryFn: async () => {
+      const res = await fetch(URL_AI_SETTINGS);
+      return res.json();
+    },
+  });
 
   const fetchSubscriptions = async () => {
     const response = await fetchPetition<ResponseSubscriptions>({
@@ -70,16 +81,26 @@ export const SubscriptionContent = () => {
         onClose={() => setOpenCreateSubModal(false)}
         refetch={refetch}
       />
+      <DetectSubscriptionsModal
+        isOpen={openDetectModal}
+        onClose={() => setOpenDetectModal(false)}
+        refetch={refetch}
+      />
       <div className='space-y-1'>
         <div className='flex items-start justify-between'>
           <Heading
-            maxWidthClass='max-w-[calc(100%-180px)]'
+            maxWidthClass='max-w-[calc(100%-290px)]'
             title='Subscriptions'
             description="Manage all your subscriptions to ensure you're not paying for anything you don't use"
           />
-          <Button variant='default' onClick={() => setOpenCreateSubModal(true)}>
-            <Plus className='mr-2 size-4' /> Add subscriptions
-          </Button>
+          <div className='flex items-center gap-2'>
+            <Button variant='outline' onClick={() => setOpenDetectModal(true)}>
+              <Search className='mr-2 size-4' /> Detect subscriptions
+            </Button>
+            <Button variant='default' onClick={() => setOpenCreateSubModal(true)}>
+              <Plus className='mr-2 size-4' /> Add subscriptions
+            </Button>
+          </div>
         </div>
         {subscriptionCosts && <SubscriptionCosts subscriptionCosts={subscriptionCosts} />}
       </div>

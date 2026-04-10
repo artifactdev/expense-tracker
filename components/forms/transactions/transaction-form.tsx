@@ -1,7 +1,17 @@
-"use client";
+'use client';
 
-import { ClockLoader } from "@/components/icons/clock-loader";
-import { Button } from "@/components/ui/button";
+import { useCallback, useState } from 'react';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import { CalendarIcon } from '@radix-ui/react-icons';
+import { useQuery } from '@tanstack/react-query';
+import { format } from 'date-fns';
+import { Bot } from 'lucide-react';
+import { Controller, useForm } from 'react-hook-form';
+
+import { ClockLoader } from '@/components/icons/clock-loader';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
 import {
   Form,
   FormControl,
@@ -9,26 +19,15 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import {
-  TransactionFormValue,
-  UpdateTransSchema,
-} from "@/schemas/update-transactions-schema";
-import type { Categories, TransactionObjBack } from "@/types";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Controller, useForm } from "react-hook-form";
-import { CategoriesComboboxField } from "../categories-combobox-field";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
-import { format } from "date-fns";
-import { CalendarIcon } from "@radix-ui/react-icons";
-import { Calendar } from "@/components/ui/calendar";
-import { dateFormat } from "@/utils/const";
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import type { AISettings } from '@/schemas/update-ai-settings-schema';
+import { TransactionFormValue, UpdateTransSchema } from '@/schemas/update-transactions-schema';
+import type { Categories, TransactionObjBack } from '@/types';
+import { dateFormat, URL_AI_SETTINGS, URL_AI_SUGGEST_CATEGORIES } from '@/utils/const';
+import { CategoriesComboboxField } from '../categories-combobox-field';
 
 type Props = {
   loading: boolean;
@@ -49,13 +48,25 @@ export const TransactionForm = ({
   submitButtonContent,
   cancelButtonContent,
 }: Props) => {
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const { data: aiSettings } = useQuery<AISettings>({
+    queryKey: [URL_AI_SETTINGS],
+    queryFn: async () => {
+      const res = await fetch(URL_AI_SETTINGS);
+      return res.json();
+    },
+  });
+
+  const aiEnabled = aiSettings?.aiEnabled && aiSettings?.aiCategoriesEnabled;
+
   const defaultValues = {
-    name: initData?.name ?? "",
+    name: initData?.name ?? '',
     amount: initData?.amount ?? 0,
     date: initData?.date,
     categories: initData?.categories ?? [],
-    notes: initData?.notes ?? "",
-    id: initData?.id ?? "new trans",
+    notes: initData?.notes ?? '',
+    id: initData?.id ?? 'new trans',
   };
 
   const form = useForm<TransactionFormValue>({
@@ -65,25 +76,60 @@ export const TransactionForm = ({
 
   const { trigger } = form;
 
+  const handleAISuggest = useCallback(async () => {
+    const name = form.getValues('name');
+    const amount = form.getValues('amount');
+    if (!name) return;
+    setAiLoading(true);
+    try {
+      const res = await fetch(URL_AI_SUGGEST_CATEGORIES, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          amount,
+          counterparty: form.getValues('counterparty' as keyof TransactionFormValue) as
+            | string
+            | undefined,
+          notes: form.getValues('notes'),
+        }),
+      });
+      const data: { ok: boolean; suggestions?: string[] } = await res.json();
+      if (data.ok && data.suggestions && data.suggestions.length > 0) {
+        const currentCats = form.getValues('categories') as Categories[];
+        const suggested: Categories[] = data.suggestions.map(s => {
+          const existing = userCategories.find(c => c.name.toLowerCase() === s.toLowerCase());
+          return existing ?? { id: crypto.randomUUID(), name: s, newEntry: true };
+        });
+        const merged = [
+          ...currentCats,
+          ...suggested.filter(
+            s => !currentCats.some(c => c.name.toLowerCase() === s.name.toLowerCase())
+          ),
+        ];
+        form.setValue('categories', merged, { shouldDirty: true });
+      }
+    } finally {
+      setAiLoading(false);
+    }
+  }, [form, userCategories]);
+
   return (
     <Form {...form}>
-      <form
-        onSubmit={form.handleSubmit(submitHandler)}
-        className="w-full pl-1 pr-3 space-y-2"
-      >
+      <form onSubmit={form.handleSubmit(submitHandler)} className='w-full space-y-2 pl-1 pr-3'>
         <FormField
           control={form.control}
-          name="name"
+          name='name'
           render={({ field }) => (
             <FormItem>
               <FormLabel>Name</FormLabel>
               <FormControl>
                 <Input
-                  type="text"
-                  placeholder="Enter a name..."
+                  type='text'
+                  placeholder='Enter a name...'
                   disabled={loading}
                   {...field}
-                  onChange={(e) => {
+                  onChange={e => {
                     field.onChange(e);
                     trigger(field.name);
                   }}
@@ -95,43 +141,37 @@ export const TransactionForm = ({
         />
         <FormField
           control={form.control}
-          name="date"
+          name='date'
           render={({ field }) => {
             const parsedDateValue =
-              typeof field.value === "string"
-                ? new Date(field.value)
-                : field.value;
+              typeof field.value === 'string' ? new Date(field.value) : field.value;
             return (
-              <FormItem className="flex flex-col">
+              <FormItem className='flex flex-col'>
                 <FormLabel>Date</FormLabel>
                 <Popover>
                   <PopoverTrigger asChild>
                     <FormControl>
                       <Button
-                        variant={"outline"}
+                        variant={'outline'}
                         className={cn(
-                          "w-full pl-3 text-left font-normal justify-start",
-                          !field.value && "text-muted-foreground",
+                          'w-full justify-start pl-3 text-left font-normal',
+                          !field.value && 'text-muted-foreground'
                         )}
                       >
-                        <CalendarIcon className="w-4 h-4 mr-2" />
+                        <CalendarIcon className='mr-2 h-4 w-4' />
                         {field.value ? (
-                          format(parsedDateValue, "LLL dd, y")
+                          format(parsedDateValue, 'LLL dd, y')
                         ) : (
                           <span>Pick a date</span>
                         )}
                       </Button>
                     </FormControl>
                   </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
+                  <PopoverContent className='w-auto p-0' align='start'>
                     <Calendar
-                      mode="single"
+                      mode='single'
                       selected={parsedDateValue}
-                      onSelect={(date) =>
-                        field.onChange(
-                          date ? format(date, dateFormat.ISO) : date,
-                        )
-                      }
+                      onSelect={date => field.onChange(date ? format(date, dateFormat.ISO) : date)}
                       defaultMonth={parsedDateValue}
                     />
                   </PopoverContent>
@@ -142,19 +182,32 @@ export const TransactionForm = ({
           }}
         />
         <FormItem>
-          <FormLabel>Categories</FormLabel>
+          <div className='flex items-center justify-between'>
+            <FormLabel>Categories</FormLabel>
+            {aiEnabled && (
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                disabled={aiLoading || loading}
+                onClick={handleAISuggest}
+                className='h-6 gap-1 px-2 text-xs'
+              >
+                <Bot className='size-3' />
+                {aiLoading ? 'Suggesting...' : 'AI suggest'}
+              </Button>
+            )}
+          </div>
           <FormControl>
             <Controller
               control={form.control}
-              name="categories"
+              name='categories'
               render={({ field, fieldState: { error } }) => (
                 <>
                   <CategoriesComboboxField
                     selectedCategories={field.value as Categories[]}
                     userCats={userCategories}
-                    updateSelectedCategories={(selected) =>
-                      field.onChange(selected)
-                    }
+                    updateSelectedCategories={selected => field.onChange(selected)}
                   />
                   {error && <FormMessage>{error.message}</FormMessage>}
                 </>
@@ -164,20 +217,20 @@ export const TransactionForm = ({
         </FormItem>
         <FormField
           control={form.control}
-          name="amount"
+          name='amount'
           render={({ field }) => (
             <FormItem>
               <FormLabel>Amount</FormLabel>
               <FormControl>
                 <Input
-                  type="number"
-                  step="0.01"
-                  placeholder="Enter an amount..."
+                  type='number'
+                  step='0.01'
+                  placeholder='Enter an amount...'
                   disabled={loading}
                   {...field}
-                  onChange={(e) => {
+                  onChange={e => {
                     const parsedValue = parseFloat(e.target.value);
-                    field.onChange(isNaN(parsedValue) ? "" : parsedValue);
+                    field.onChange(isNaN(parsedValue) ? '' : parsedValue);
                     trigger(field.name);
                   }}
                 />
@@ -188,17 +241,17 @@ export const TransactionForm = ({
         />
         <FormField
           control={form.control}
-          name="notes"
+          name='notes'
           render={({ field }) => (
             <FormItem>
               <FormLabel>Notes</FormLabel>
               <FormControl>
                 <Input
-                  type="text"
-                  placeholder="Notes..."
+                  type='text'
+                  placeholder='Notes...'
                   disabled={loading}
                   {...field}
-                  onChange={(e) => {
+                  onChange={e => {
                     field.onChange(e);
                     trigger(field.name);
                   }}
@@ -209,18 +262,13 @@ export const TransactionForm = ({
           )}
         />
 
-        <div className="flex items-center justify-end w-full pt-6 space-x-2">
-          <Button
-            type="button"
-            disabled={loading}
-            variant="outline"
-            onClick={onCancel}
-          >
-            {cancelButtonContent || "Cancel"}
+        <div className='flex w-full items-center justify-end space-x-2 pt-6'>
+          <Button type='button' disabled={loading} variant='outline' onClick={onCancel}>
+            {cancelButtonContent || 'Cancel'}
           </Button>
-          <Button type="submit" disabled={loading} variant="default">
-            {loading && <ClockLoader className="mr-2" />}
-            {submitButtonContent || "Update"}
+          <Button type='submit' disabled={loading} variant='default'>
+            {loading && <ClockLoader className='mr-2' />}
+            {submitButtonContent || 'Update'}
           </Button>
         </div>
       </form>

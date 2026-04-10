@@ -145,6 +145,23 @@ export const TransactionsTable = <TData,>({
         cell: ({ getValue }) => <DateCell date={getValue() as string} />,
       },
       {
+        accessorKey: 'account',
+        header: 'ACCOUNT',
+        cell: ({ getValue }) => {
+          const value = getValue() as string | undefined;
+          return value ? (
+            <Tooltip>
+              <TooltipTrigger>
+                <span className='font-mono text-xs text-muted-foreground'>{value}</span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className='font-mono text-xs'>{value}</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : null;
+        },
+      },
+      {
         accessorKey: 'categories',
         header: 'CATEGORIES',
         cell: ({ getValue }) => {

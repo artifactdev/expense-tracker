@@ -4,6 +4,7 @@ import {
   BarChart3,
   Bell,
   BellOff,
+  Bot,
   CalendarCheck,
   CalendarX,
   Check,
@@ -236,4 +237,5 @@ export const Icons = {
   chart: BarChart3,
   notifyOn: Bell,
   notifyOff: BellOff,
+  ai: Bot,
 };

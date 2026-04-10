@@ -1,41 +1,90 @@
-# 💰 Expense Tracker 💰
+# Expense Tracker
 
-Welcome to the repository for Expense Tracker - a comprehensive tool designed to help you manage your financial transactions with ease. Whether you want to keep track of your incomes, expenses, or subscriptions, Expense Tracker provides a user-friendly platform to do it all.
+Eine selbst gehostete Webanwendung zur Verwaltung von Finanztransaktionen, Ausgaben und Abonnements — mit optionalen KI-Funktionen und MCP-Schnittstelle.
 
-## 📌 Overview
+## Überblick
 
-Expense Tracker leverages a modern technology stack to deliver a seamless and efficient user experience. From uploading transactions via CSV to manually entering them through a form, this application simplifies financial management like never before. Here's a snapshot of the technologies and libraries used:
+Expense Tracker ist für den **Eigenbetrieb im Heimnetz** (z. B. Unraid, NAS, Raspberry Pi) konzipiert. Es gibt keine Cloud-Abhängigkeit und keine Authentifizierung — die App gehört dir.
 
-- Framework - [Next.js 14](https://nextjs.org/13)
-- Language - [TypeScript](https://www.typescriptlang.org)
-- Styling - [Tailwind CSS](https://tailwindcss.com)
-- Components - [Shadcn-ui](https://ui.shadcn.com)
-- Schema Validations - [Zod](https://zod.dev)
-- Auth - [Nextauth](https://next-auth.js.org)
-- File Uploading - [Filepond](https://pqina.nl/filepond/)
-- Async State Management - [Tanstack Query](https://tanstack.com/query/latest)
-- Tables - [Tanstack Tables](https://ui.shadcn.com/docs/components/data-table)
-- Forms - [React Hook Form](https://ui.shadcn.com/docs/components/form)
-- Linting - [ESLint](https://eslint.org)
-- Formatting - [Prettier](https://prettier.io)
-- Email API - [Resend](https://resend.com/)
+## Features
 
-## 🌐 Live Demo
+- **Financial Dashboard** — Balkendiagramme und Kreisdiagramm für Einnahmen/Ausgaben-Überblick
+- **Transaktionsverwaltung** — Manuelle Eingabe oder CSV-Import (Bulk-Upload mit automatischem Spalten-Mapping)
+- **Abonnement-Tracking** — Aktive/inaktive Abos verwalten, monatliche/jährliche Kosten im Überblick
+- **KI-gestützte Kategorisierung** — Beim Erfassen einer Transaktion schlägt die KI passende Kategorien vor (Einzeltransaktion + Bulk-CSV)
+- **Automatische Abo-Erkennung** — Algorithmische + optionale KI-Analyse erkennt wiederkehrende Transaktionen als Abonnement-Kandidaten
+- **MCP HTTP-Server** — Read-only MCP-Schnittstelle für KI-Assistenten (Claude Desktop, Cursor, Windsurf, ...)
+- **Responsives Design** — Vollständig nutzbar auf Desktop und Mobilgerät
+- **Dark/Light/System-Theme**
 
-To see Expense Tracker in action, visit [www.expense-tracker.pabloaviles.dev](https://www.expense-tracker.pabloaviles.dev).
+## Tech Stack
 
-## ⭐ Features
+- **Framework:** [Next.js 16](https://nextjs.org) (App Router, Turbopack)
+- **Sprache:** [TypeScript](https://www.typescriptlang.org)
+- **Styling:** [Tailwind CSS](https://tailwindcss.com)
+- **Komponenten:** [shadcn/ui](https://ui.shadcn.com) + [Radix UI](https://radix-ui.com)
+- **Datenbank:** SQLite via [Prisma ORM](https://prisma.io)
+- **Formularvalidierung:** [Zod](https://zod.dev) + [React Hook Form](https://react-hook-form.com)
+- **State Management:** [TanStack Query v5](https://tanstack.com/query/latest)
+- **Tabellen:** [TanStack Table v8](https://tanstack.com/table/latest)
 
-- **Financial Dashboard**: Access a dedicated dashboard for transactions, featuring bar charts and a pie chart for a quick and clear overview of your incomes and expenses. This visual representation helps you grasp your financial status at a glance, without diving into the details.
-- **Transaction Management**: Easily upload CSV files or input transactions manually to keep track of your financial activities.
-- **Subscription Tracking**: Monitor both active and inactive subscriptions in one place.
-- **Responsive Design**: Enjoy a consistent and smooth experience across all your devices.
-- **Secure Authentication**: Utilizes Next-Auth for robust security, allowing users to log in via Google or with an email/password combination. Emails are verified through Resend, ensuring users have rightful access to the email provided.
+## Schnellstart
 
-Dive into the code, explore the features, and feel free to contribute or provide feedback!
+```bash
+git clone https://github.com/dein-user/expense-tracker.git
+cd expense-tracker
+npm install
+echo 'DATABASE_URL="file:./prisma/dev.db"' > .env
+npx prisma migrate dev
+npm run dev
+```
 
----
+App läuft unter [http://localhost:3000](http://localhost:3000).
 
-Happy Tracking!
+Weitere Installationsoptionen (Docker, Unraid) → [docs/installation.md](docs/installation.md)
 
-[Pablo Avilés](https://www.pabloaviles.dev/)
+## KI-Funktionen
+
+Die KI-Features sind **vollständig optional** und müssen unter **Settings → AI** aktiviert werden. Jeder OpenAI-kompatible Endpunkt wird unterstützt — also auch lokale Modelle via [Ollama](https://ollama.ai) oder [LM Studio](https://lmstudio.ai).
+
+→ [docs/ai-features.md](docs/ai-features.md)
+
+## MCP-Integration
+
+Der MCP HTTP-Server unter `/api/mcp` ermöglicht KI-Assistenten direkten Lesezugriff auf Finanzdaten.
+
+Konfigurationsbeispiel für **Claude Desktop**:
+
+```json
+{
+  "mcpServers": {
+    "expense-tracker": {
+      "url": "http://localhost:3000/api/mcp",
+      "transport": { "type": "http" }
+    }
+  }
+}
+```
+
+Vollständige Integrationsanleitung (Cursor, Windsurf, VS Code, Continue.dev) → [docs/mcp.md](docs/mcp.md)
+
+## Dokumentation
+
+| Dokument                                     | Inhalt                                                   |
+| -------------------------------------------- | -------------------------------------------------------- |
+| [docs/installation.md](docs/installation.md) | Lokale Einrichtung, Docker, Unraid-Setup                 |
+| [docs/ai-features.md](docs/ai-features.md)   | KI-Konfiguration, Kategorisierung, Abo-Erkennung         |
+| [docs/mcp.md](docs/mcp.md)                   | MCP-Server, Tool-Referenz, Integration in KI-Tools       |
+| [docs/architecture.md](docs/architecture.md) | Tech Stack, Verzeichnisstruktur, API-Routen, Datenmodell |
+
+## Umgebungsvariablen
+
+Einzige erforderliche Variable:
+
+```env
+DATABASE_URL="file:./prisma/dev.db"
+```
+
+## Lizenz
+
+MIT

@@ -28,6 +28,9 @@ export const errorMessages = {
   incorrectData: 'There was an error with the data provided. Try again later',
   changeName: 'There was an error changing the name. Try again later',
   updatingPreferences: 'There was an error updating the preferences on database. Try again later',
+  updatingAISettings: 'There was an error updating the AI settings. Try again later',
+  aiNotConfigured: 'AI is not configured or disabled',
+  aiRequestFailed: 'The AI request failed. Check your endpoint and API key.',
 } as const;
 
 export const dateFormat = {
@@ -78,6 +81,12 @@ export const URL_UPDATE_SUBSCRIPTION = `/api/user/subscriptions/update`;
 export const URL_DELETE_SUBSCRIPTION = `/api/user/subscriptions/delete`;
 export const URL_CHANGE_NAME = `/api/user/change-name`;
 export const URL_CHANGE_PREFERENCES = `/api/user/change-preferences`;
+export const URL_AI_SETTINGS = `/api/user/ai-settings`;
+export const URL_AI_SUGGEST_CATEGORIES = `/api/ai/suggest-categories`;
+export const URL_AI_MODELS = `/api/ai/models`;
+export const URL_AI_TEST_CONNECTION = `/api/ai/test-connection`;
+export const URL_AI_CATEGORIZE_EXISTING = `/api/ai/categorize-existing`;
+export const URL_DETECT_SUBSCRIPTIONS = `/api/user/subscriptions/detect`;
 
 export const DEFAULT_PAGE = 1;
 export const DEFAULT_PAGE_LIMIT = 20;
@@ -238,5 +247,11 @@ export const navItems: NavItemWithOptionalChildren[] = [
         ],
       },
     ],
+  },
+  {
+    title: 'AI Settings',
+    href: '/dashboard/settings/ai',
+    icon: 'ai',
+    label: 'ai-settings',
   },
 ];

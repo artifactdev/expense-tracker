@@ -1,26 +1,25 @@
-"use client";
-import { DeleteTransactionsModal } from "@/components/modal/transactions/delete-transactions-modal";
-import { UpdateTransactionsModal } from "@/components/modal/transactions/update-transactions-modal";
-import { Button } from "@/components/ui/button";
+'use client';
+
+import { useState } from 'react';
+
+import { Row, Table } from '@tanstack/react-table';
+import { Edit, MoreHorizontal, Trash } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+
+import { DeleteTransactionsModal } from '@/components/modal/transactions/delete-transactions-modal';
+import { UpdateTransactionsModal } from '@/components/modal/transactions/update-transactions-modal';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { useToast } from "@/components/ui/use-toast";
-import { useFetch } from "@/hooks/use-fetch";
-import type {
-  Categories,
-  TransactionDeleteReponse,
-  TransactionObjBack,
-} from "@/types";
-import { URL_DELETE_TRANSACTIONS } from "@/utils/const";
-import { Row, Table } from "@tanstack/react-table";
-import { Edit, MoreHorizontal, Trash } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+} from '@/components/ui/dropdown-menu';
+import { useToast } from '@/components/ui/use-toast';
+import { useFetch } from '@/hooks/use-fetch';
+import type { Categories, TransactionDeleteReponse, TransactionObjBack } from '@/types';
+import { URL_DELETE_TRANSACTIONS } from '@/utils/const';
 
 interface CellActionProps {
   selectedTransactions: TransactionObjBack[];
@@ -45,31 +44,31 @@ export const CellAction: React.FC<CellActionProps> = ({
 
   const onDeleteTransactions = async () => {
     setDeleteLoading(true);
-    const transactions = selectedTransactions.map((trans) => ({
+    const transactions = selectedTransactions.map(trans => ({
       transactionIds: trans.id,
       categoriesId: trans.categories,
     }));
 
     const parsedRes = await fetchPetition<TransactionDeleteReponse>({
       url: URL_DELETE_TRANSACTIONS,
-      method: "DELETE",
+      method: 'DELETE',
       body: { transactions },
-      extraHeaders: { "Content-Type": "application/json" },
+      extraHeaders: { 'Content-Type': 'application/json' },
     });
     if (parsedRes.error) {
       toast({
-        title: "There was an error deleting the transactions",
+        title: 'There was an error deleting the transactions',
         description: parsedRes.error,
-        variant: "destructive",
+        variant: 'destructive',
       });
     }
-    if (parsedRes.result && parsedRes.deletedCount) {
+    if (parsedRes.ok && parsedRes.deletedCount) {
       toast({
-        title: "Transactions successfully deleted",
+        title: 'Transactions successfully deleted',
         description: `Deleted ${parsedRes.deletedCount} ${
-          parsedRes.deletedCount === 1 ? "transaction" : "transactions"
+          parsedRes.deletedCount === 1 ? 'transaction' : 'transactions'
         }`,
-        variant: "success",
+        variant: 'success',
       });
       table.setRowSelection({}); // remove selected rows
       router.refresh();
@@ -95,19 +94,19 @@ export const CellAction: React.FC<CellActionProps> = ({
       />
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="w-8 h-8 p-0">
-            <span className="sr-only">Open menu</span>
-            <MoreHorizontal className="w-4 h-4" />
+          <Button variant='ghost' className='h-8 w-8 p-0'>
+            <span className='sr-only'>Open menu</span>
+            <MoreHorizontal className='h-4 w-4' />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent align='end'>
           <DropdownMenuLabel>Actions</DropdownMenuLabel>
           <DropdownMenuItem onClick={() => setOpenUpdateModal(true)}>
-            <Edit className="w-4 h-4 mr-2" /> Update
+            <Edit className='mr-2 h-4 w-4' /> Update
           </DropdownMenuItem>
           {isSelectedRow && (
             <DropdownMenuItem onClick={() => setOpenDeleteModal(true)}>
-              <Trash className="w-4 h-4 mr-2" /> Delete
+              <Trash className='mr-2 h-4 w-4' /> Delete
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
