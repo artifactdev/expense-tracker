@@ -4,7 +4,6 @@ import { useEffect } from 'react';
 
 import { MoonIcon, SunIcon } from '@radix-ui/react-icons';
 import { Check } from 'lucide-react';
-import { useSession } from 'next-auth/react';
 import { useTheme } from 'next-themes';
 
 import { Button } from '@/components/ui/button';
@@ -16,25 +15,25 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/components/ui/use-toast';
 import { useFetch } from '@/hooks/use-fetch';
-import type { CustomSessionI, UpdateUserPreferencesResponse } from '@/types';
+import type { UpdateUserPreferencesResponse } from '@/types';
 import { themeOptions, URL_CHANGE_PREFERENCES } from '@/utils/const';
 
 export default function ThemeToggle() {
   const { setTheme, theme } = useTheme();
-  const { data, update } = useSession();
-  const session = data as CustomSessionI;
   const { fetchPetition } = useFetch();
   const { toast } = useToast();
 
   useEffect(() => {
-    if (session?.user?.theme) {
-      setTheme(session.user.theme);
-    }
-  }, [session]);
+    fetch('/api/user/preferences')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.theme) setTheme(data.theme);
+      })
+      .catch(() => {});
+  }, []);
 
   const changeTheme = async (themeName: string) => {
     setTheme(themeName);
-    await update({ theme: themeName });
     const response = await fetchPetition<UpdateUserPreferencesResponse>({
       method: 'POST',
       url: URL_CHANGE_PREFERENCES,

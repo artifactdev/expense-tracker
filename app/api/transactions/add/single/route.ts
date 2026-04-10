@@ -1,12 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { errorMessages } from "@/utils/const";
-import type { TransactionObj } from "@/types";
-import TransactionModel from "@/models/transaction/transaction-model";
-import CategoriesModel from "@/models/categories/categories-model";
-import { capitalizeFirstLetter } from "@/utils/capitalize-first-letter";
-import mongoose from "mongoose";
-import UserModel from "@/models/user/user-model";
-import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from 'next/server';
+
+import { prisma } from '@/lib/prisma';
+import type { TransactionObj } from '@/types';
+import { capitalizeFirstLetter } from '@/utils/capitalize-first-letter';
+import { errorMessages, LOCAL_USER_ID } from '@/utils/const';
 
 interface ReqBody {
   transaction: TransactionObj;
@@ -17,64 +14,50 @@ export const POST = async (req: NextRequest) => {
     const { transaction } = (await req.json()) as ReqBody;
     const { categories, ...transactionData } = transaction;
 
-    const tokenNext = await getToken({
-      req,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
-    if (!tokenNext || !tokenNext.id) {
-      return NextResponse.json(
-        { ok: false, error: errorMessages.relogAcc },
-        { status: 400 },
-      );
-    }
-
-    const user = await UserModel.findById(tokenNext.id).populate("categories");
-    if (!user) {
-      return NextResponse.json(
-        { ok: false, error: errorMessages.relogAcc },
-        { status: 400 },
-      );
-    }
-
     // Process each category
-    const processedCategories = await Promise.all(
-      categories.map(async (category) => {
-        // Return existing category ID (parsed to ObjectId)
-        if (!category.newEntry) return new mongoose.Types.ObjectId(category.id);
+    const processedCategoryIds = await Promise.all(
+      categories.map(async category => {
+        if (!category.newEntry) return category.id as string;
 
-        // Check if the category already exists (case insensitive)
-        let existingCategory = await CategoriesModel.findOne({
-          name: { $regex: new RegExp("^" + category.name + "$", "i") },
+        const existing = await prisma.category.findFirst({
+          where: { name: { equals: category.name } },
         });
-
-        if (!existingCategory) {
-          // Create new category
-          existingCategory = await new CategoriesModel({
-            name: capitalizeFirstLetter(category.name),
-          }).save();
-        }
-        // Update user's categories if the new category is not already associated
-        if (!user.categories.includes(existingCategory._id)) {
-          await UserModel.findByIdAndUpdate(user._id, {
-            $addToSet: { categories: existingCategory._id },
+        if (existing) {
+          await prisma.userCategory.upsert({
+            where: { userId_categoryId: { userId: LOCAL_USER_ID, categoryId: existing.id } },
+            update: {},
+            create: { userId: LOCAL_USER_ID, categoryId: existing.id },
           });
+          return existing.id;
         }
-        return existingCategory._id;
-      }),
+        const created = await prisma.category.create({
+          data: {
+            name: capitalizeFirstLetter(category.name),
+            slug: category.name.toLowerCase().replace(/\s+/g, '-'),
+          },
+        });
+        await prisma.userCategory.create({
+          data: { userId: LOCAL_USER_ID, categoryId: created.id },
+        });
+        return created.id;
+      })
     );
 
-    const created = await TransactionModel.create({
-      ...transactionData,
-      categories: processedCategories,
-      userId: new mongoose.Types.ObjectId(tokenNext.id as string),
+    const created = await prisma.transaction.create({
+      data: {
+        ...transactionData,
+        userId: LOCAL_USER_ID,
+        categories: { create: processedCategoryIds.map(id => ({ categoryId: id })) },
+      },
+      include: { categories: { include: { category: true } } },
     });
 
     return NextResponse.json({ ok: true, data: created }, { status: 200 });
   } catch (err) {
-    console.log("ERROR CREATING TRANSACTION", err);
+    console.log('ERROR CREATING TRANSACTION', err);
     return NextResponse.json(
       { ok: false, error: errorMessages.createTransaction },
-      { status: 500 },
+      { status: 500 }
     );
   }
 };

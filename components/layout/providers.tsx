@@ -3,7 +3,6 @@
 import React from 'react';
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { SessionProvider, SessionProviderProps } from 'next-auth/react';
 import { usePathname } from 'next/navigation';
 
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -19,13 +18,7 @@ const queryClient = new QueryClient({
   },
 });
 
-export default function Providers({
-  session,
-  children,
-}: {
-  session: SessionProviderProps['session'];
-  children: React.ReactNode;
-}) {
+export default function Providers({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const landingPageForcedTheme = pathname === '/' ? 'dark' : undefined;
 
@@ -36,15 +29,13 @@ export default function Providers({
       enableSystem
       forcedTheme={landingPageForcedTheme}
     >
-      <SessionProvider session={session}>
-        <QueryClientProvider client={queryClient}>
-          <DateFormatProvider>
-            <CurrencyProvider>
-              <TooltipProvider>{children}</TooltipProvider>
-            </CurrencyProvider>
-          </DateFormatProvider>
-        </QueryClientProvider>
-      </SessionProvider>
+      <QueryClientProvider client={queryClient}>
+        <DateFormatProvider>
+          <CurrencyProvider>
+            <TooltipProvider>{children}</TooltipProvider>
+          </CurrencyProvider>
+        </DateFormatProvider>
+      </QueryClientProvider>
     </ThemeProvider>
   );
 }

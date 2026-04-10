@@ -1,6 +1,5 @@
-import { format, subYears } from 'date-fns';
+import { format } from 'date-fns';
 import { Plus } from 'lucide-react';
-import { getServerSession, type NextAuthOptions } from 'next-auth';
 import Link from 'next/link';
 import { z } from 'zod';
 
@@ -11,13 +10,13 @@ import { getActiveFilters } from '@/components/tables/transactions-tables/utils/
 import { buttonVariants } from '@/components/ui/button';
 import { Heading } from '@/components/ui/heading';
 import { Separator } from '@/components/ui/separator';
-import { authOptions } from '@/lib/auth-options';
+import { prisma } from '@/lib/prisma';
 import { cn } from '@/lib/utils';
 import { FilteredTransactionsSchema } from '@/schemas/filtered-transactions-schema';
 import { getFilteredTransactions } from '@/services/transactions';
 import { getUserCategories } from '@/services/user';
-import type { CustomSessionI, ParamsProps } from '@/types';
-import { dateFormat, DEFAULT_PAGE, DEFAULT_PAGE_LIMIT, errorMessages } from '@/utils/const';
+import type { ParamsProps } from '@/types';
+import { DEFAULT_PAGE, DEFAULT_PAGE_LIMIT, errorMessages, LOCAL_USER_ID } from '@/utils/const';
 import { parseZodErrors } from '@/utils/parse-zod-errors';
 
 const breadcrumbItems = [
@@ -27,8 +26,8 @@ const breadcrumbItems = [
 
 type TransactionsProps = {
   userId: string;
-  startDate: string;
-  endDate: string;
+  startDate: string | null;
+  endDate: string | null;
   transType: string | null;
   filterType: string | null;
   filterOperator: string | null;
@@ -85,29 +84,23 @@ export default async function ListTransactions({ searchParams }: ParamsProps) {
     filterValue,
     categories,
     viewport,
-  } = searchParams;
+  } = await searchParams;
   const page = Number(pageParam) || DEFAULT_PAGE;
   const pageLimit = Number(pageLimitParam) || DEFAULT_PAGE_LIMIT;
   const offset = (page - 1) * pageLimit;
   const parsedCategories = categories?.split(',');
 
-  const session = (await getServerSession(
-    authOptions as unknown as NextAuthOptions
-  )) as CustomSessionI;
+  const user = await prisma.user.findUnique({ where: { id: LOCAL_USER_ID } });
+  const userCategories = await getUserCategories(LOCAL_USER_ID);
 
-  const userCategories = await getUserCategories(session?.user?.id ?? '');
+  const storedFrom = user?.transactionsDateFrom;
+  const storedTo = user?.transactionsDateTo;
 
-  const startDate =
-    typeof startDateParam === 'string'
-      ? startDateParam
-      : (session?.user?.transactionsDate?.from ?? format(subYears(new Date(), 1), dateFormat.ISO));
-  const endDate =
-    typeof endDateParam === 'string'
-      ? endDateParam
-      : (session?.user?.transactionsDate?.to ?? format(new Date(), dateFormat.ISO));
+  const startDate = typeof startDateParam === 'string' ? startDateParam : (storedFrom ?? null);
+  const endDate = typeof endDateParam === 'string' ? endDateParam : (storedTo ?? null);
 
   const transResult = await getTransactions({
-    userId: session?.user?.id ?? '',
+    userId: LOCAL_USER_ID,
     startDate,
     endDate,
     transType: transType ?? null,
@@ -159,7 +152,9 @@ export default async function ListTransactions({ searchParams }: ParamsProps) {
           <TransactionsTable
             data={transResult.data.list}
             pageCount={pageCount}
-            userStoredDates={session.user?.transactionsDate}
+            userStoredDates={
+              storedFrom && storedTo ? { from: storedFrom, to: storedTo } : undefined
+            }
             userCategories={userCategories}
             viewport={viewport}
           />

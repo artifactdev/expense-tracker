@@ -1,13 +1,20 @@
-"use client";
+'use client';
+
+import React, { useState } from 'react';
+
 import {
   ColumnDef,
   flexRender,
   getCoreRowModel,
   getFilteredRowModel,
   useReactTable,
-} from "@tanstack/react-table";
-import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
+} from '@tanstack/react-table';
+import { FileUp, Undo } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+
+import { UploadTransactionsModal } from '@/components/modal/transactions/upload-transactions-modal';
+import { Button } from '@/components/ui/button';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import {
   Table,
   TableBody,
@@ -15,21 +22,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { FileUp, Undo } from "lucide-react";
-import { UploadTransactionsModal } from "@/components/modal/transactions/upload-transactions-modal";
-import type {
-  TransactionBulk,
-  TransactionBulkResponse,
-  TransactionEndpointBody,
-} from "@/types";
-import { parseToBackendDate } from "@/utils/parse-to-backend-date";
-import { parseAmount } from "@/utils/parse-amount";
-import { useFetch } from "@/hooks/use-fetch";
-import { URL_UPLOAD_BULK_TRANSACTION } from "@/utils/const";
-import { useToast } from "@/components/ui/use-toast";
-import { useRouter } from "next/navigation";
+} from '@/components/ui/table';
+import { useToast } from '@/components/ui/use-toast';
+import { useFetch } from '@/hooks/use-fetch';
+import type { TransactionBulk, TransactionBulkResponse, TransactionEndpointBody } from '@/types';
+import { URL_UPLOAD_BULK_TRANSACTION } from '@/utils/const';
+import { parseAmount } from '@/utils/parse-amount';
+import { parseToBackendDate } from '@/utils/parse-to-backend-date';
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
@@ -59,9 +58,7 @@ export const AddTransactionsTable = <TData, TValue>({
 
   const onUploadTrans = async () => {
     setIsUploadingTrans(true);
-    const parsedTrans: TransactionEndpointBody[] = (
-      data as TransactionBulk[]
-    ).map((trans) => {
+    const parsedTrans: TransactionEndpointBody[] = (data as TransactionBulk[]).map(trans => {
       const parsedBackendDate = parseToBackendDate({
         dateString: trans.Date,
         dateFormatFromCSV: CSVDateFormat,
@@ -71,13 +68,15 @@ export const AddTransactionsTable = <TData, TValue>({
         amount: parseAmount(trans.Amount),
         date: parsedBackendDate,
         notes: trans.Notes,
+        counterparty: trans.Counterparty,
+        account: trans.Account,
         selectedCategories:
           trans.selectedCategories && trans.selectedCategories.length > 0
             ? trans.selectedCategories
             : [
                 {
-                  id: process.env.GENERIC_ID ?? "",
-                  name: "Generic",
+                  id: process.env.GENERIC_ID ?? '',
+                  name: 'Generic',
                   common: true,
                 },
               ],
@@ -86,22 +85,22 @@ export const AddTransactionsTable = <TData, TValue>({
 
     const res = await fetchPetition<TransactionBulkResponse>({
       url: URL_UPLOAD_BULK_TRANSACTION,
-      method: "POST",
+      method: 'POST',
       body: { transactions: parsedTrans },
     });
 
     if (res.error) {
       toast({
-        variant: "destructive",
-        title: "Error uploading the transactions!",
+        variant: 'destructive',
+        title: 'Error uploading the transactions!',
         description: res.error,
       });
     }
-    if (res.insertedTransactions && res.updatedUser) {
+    if (res.insertedTransactions !== undefined && !res.error) {
       toast({
-        variant: "success",
-        title: "Transactions uploaded correctly!",
-        description: "The transactions has been uploaded!",
+        variant: 'success',
+        title: 'Transactions uploaded correctly!',
+        description: 'The transactions has been uploaded!',
       });
       router.refresh();
       router.push(`/dashboard/transactions/list`);
@@ -117,28 +116,25 @@ export const AddTransactionsTable = <TData, TValue>({
         onConfirm={onUploadTrans}
         loading={isUploadingTrans}
       />
-      <div className="flex items-center justify-between my-2">
-        <Button onClick={() => setCurrentStep(0)} variant="outline">
-          <Undo className="w-4 h-4 mr-2" /> Go to previous step
+      <div className='my-2 flex items-center justify-between'>
+        <Button onClick={() => setCurrentStep(0)} variant='outline'>
+          <Undo className='mr-2 h-4 w-4' /> Go to previous step
         </Button>
         <Button onClick={() => setOpen(true)}>
-          <FileUp className="w-4 h-4 mr-2" /> Upload transactions
+          <FileUp className='mr-2 h-4 w-4' /> Upload transactions
         </Button>
       </div>
-      <ScrollArea className="h-[calc(100vh-435px)] border rounded-md">
-        <Table className="relative">
+      <ScrollArea className='h-[calc(100vh-435px)] rounded-md border'>
+        <Table className='relative'>
           <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
+            {table.getHeaderGroups().map(headerGroup => (
               <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
+                {headerGroup.headers.map(header => {
                   return (
                     <TableHead key={header.id}>
                       {header.isPlaceholder
                         ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext(),
-                          )}
+                        : flexRender(header.column.columnDef.header, header.getContext())}
                     </TableHead>
                   );
                 })}
@@ -147,34 +143,25 @@ export const AddTransactionsTable = <TData, TValue>({
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  {row.getVisibleCells().map((cell) => (
+              table.getRowModel().rows.map(row => (
+                <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'}>
+                  {row.getVisibleCells().map(cell => (
                     <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
+                <TableCell colSpan={columns.length} className='h-24 text-center'>
                   No results.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
-        <ScrollBar orientation="horizontal" />
+        <ScrollBar orientation='horizontal' />
       </ScrollArea>
     </>
   );

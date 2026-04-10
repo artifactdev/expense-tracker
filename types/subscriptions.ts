@@ -1,5 +1,3 @@
-import { type IUser } from '@/models';
-
 export enum BillingPeriod {
   Monthly = 'MONTHLY',
   BiMonthly = 'BI-MONTHLY',
@@ -33,7 +31,7 @@ export interface EnhancedSubscription extends Subscription {
 export interface UserSubscriptionResponse {
   ok: boolean;
   error?: string;
-  updatedUser?: IUser;
+  updatedUser?: Record<string, unknown>;
 }
 
 export interface UserSubscriptionUpdateResponse {

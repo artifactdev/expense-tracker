@@ -1,14 +1,11 @@
-import { Session } from "next-auth";
-
 type Props = {
-  session: Session | null;
+  name?: string | null;
 };
 
-export const UserMessage = ({ session }: Props) => {
+export const UserMessage = ({ name }: Props) => {
   return (
-    <h2 className="text-3xl font-bold tracking-tight">
-      Hi, Welcome back{" "}
-      <span className="text-muted-foreground">{session?.user?.name}</span> 👋
+    <h2 className='text-3xl font-bold tracking-tight'>
+      Hi, Welcome back <span className='text-muted-foreground'>{name}</span> 👋
     </h2>
   );
 };

@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import { getServerSession } from 'next-auth';
 import { Inter } from 'next/font/google';
 import localFont from 'next/font/local';
 
@@ -32,34 +31,13 @@ export const metadata: Metadata = {
   authors: [{ name: 'Pablo Avilés Prieto', url: 'https://www.pabloaviles.dev' }],
   applicationName: 'Expense Tracker',
   icons: [{ rel: 'icon', url: '/images/favicon.ico' }],
-  openGraph: {
-    type: 'website',
-    url: 'https://www.expense-tracker.pabloaviles.dev',
-    title: 'Manage Your Finances with Ease | Expense Tracker',
-    description:
-      'Track your incomes and expenses, manage subscriptions, and get insights into your financial habits with Expense Tracker. Start simplifying your financial management today.',
-    images: [
-      {
-        url: 'https://www.expense-tracker.pabloaviles.dev/images/social-networks-preview.png',
-      },
-    ],
-    siteName: 'Expense Tracker',
-  },
-  twitter: {
-    card: 'summary_large_image',
-    title: 'Manage Your Finances with Ease | Expense Tracker',
-    description:
-      'Track your incomes and expenses, manage subscriptions, and get insights into your financial habits with Expense Tracker. Start simplifying your financial management today.',
-    images: 'https://www.expense-tracker.pabloaviles.dev/images/social-networks-preview.png',
-  },
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const session = await getServerSession();
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang='en' suppressHydrationWarning>
       <body className={`${inter.className} ${riftonFont.variable} ${inter.variable}`}>
-        <Providers session={session}>
+        <Providers>
           <Toaster />
           {children}
         </Providers>

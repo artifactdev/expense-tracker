@@ -1,7 +1,6 @@
 import { Icons } from '@/components/icons';
 
 export * from './get-values-from-obj';
-export * from './custom-session';
 export * from './user';
 export * from './categories';
 export * from './toaster-toast';
@@ -40,7 +39,7 @@ export type MainNavItem = NavItemWithOptionalChildren;
 export type SidebarNavItem = NavItemWithChildren;
 
 export type ParamsProps = {
-  searchParams: {
+  searchParams: Promise<{
     [key: string]: string | undefined;
-  };
+  }>;
 };

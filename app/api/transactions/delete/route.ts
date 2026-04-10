@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { errorMessages } from "@/utils/const";
-import { deleteTransactionsInBulk } from "@/services/transactions";
-import { getToken } from "next-auth/jwt";
-import connectDb from "@/lib/mongoose-config";
-import { Categories } from "@/types";
+import { NextRequest, NextResponse } from 'next/server';
+
+import { deleteTransactionsInBulk } from '@/services/transactions';
+import { Categories } from '@/types';
+import { errorMessages, LOCAL_USER_ID } from '@/utils/const';
 
 interface ReqBody {
   transactions: { transactionIds: string; categoriesId: Categories[] }[];
@@ -12,30 +11,16 @@ interface ReqBody {
 export const DELETE = async (req: NextRequest) => {
   try {
     const { transactions } = (await req.json()) as ReqBody;
-
-    await connectDb();
-
-    const tokenNext = await getToken({
-      req,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
-    if (!tokenNext || !tokenNext.id) {
-      return NextResponse.json(
-        { ok: false, error: errorMessages.relogAcc },
-        { status: 400 },
-      );
-    }
-
     const result = await deleteTransactionsInBulk({
-      userId: tokenNext.id as string,
+      userId: LOCAL_USER_ID,
       transactions,
     });
     return NextResponse.json(result, { status: 200 });
   } catch (err) {
-    console.log("ERROR DELETING TRANSACTIONS", err);
+    console.log('ERROR DELETING TRANSACTIONS', err);
     return NextResponse.json(
       { ok: false, error: errorMessages.deletingTransactions },
-      { status: 500 },
+      { status: 500 }
     );
   }
 };

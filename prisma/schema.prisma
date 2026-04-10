@@ -1,0 +1,87 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String         @id @default(cuid())
+  name                 String
+  email                String         @unique
+  currency             String         @default("EUR")
+  dateFormat           String         @default("EU")
+  theme                String         @default("system")
+  transactionsDateFrom String?
+  transactionsDateTo   String?
+  categories           UserCategory[]
+  transactions         Transaction[]
+  subscriptions        Subscription[]
+  createdAt            DateTime       @default(now())
+}
+
+model Transaction {
+  id           String                @id @default(cuid())
+  userId       String
+  user         User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  amount       Float
+  date         String
+  notes        String?
+  counterparty String?
+  account      String?
+  categories   TransactionCategory[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+}
+
+model Category {
+  id           String                @id @default(cuid())
+  name         String
+  slug         String                @unique
+  common       Boolean               @default(false)
+  parentId     String?
+  parent       Category?             @relation("CategoryChildren", fields: [parentId], references: [id])
+  children     Category[]            @relation("CategoryChildren")
+  transactions TransactionCategory[]
+  users        UserCategory[]
+}
+
+model TransactionCategory {
+  transactionId String
+  categoryId    String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  category      Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([transactionId, categoryId])
+}
+
+model UserCategory {
+  userId     String
+  categoryId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([userId, categoryId])
+}
+
+model Subscription {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  price         Float
+  startDate     String
+  billingPeriod String
+  autoRenew     Boolean  @default(true)
+  notify        Boolean  @default(false)
+  status        String   @default("ACTIVE")
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

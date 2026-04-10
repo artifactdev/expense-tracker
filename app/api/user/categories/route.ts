@@ -1,39 +1,14 @@
-import { errorMessages } from "@/utils/const";
-import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
-import mongoose from "mongoose";
-import { getUserCategories } from "@/services/user";
+import { NextResponse } from 'next/server';
 
-export const GET = async (req: NextRequest) => {
+import { getUserCategories } from '@/services/user';
+import { errorMessages, LOCAL_USER_ID } from '@/utils/const';
+
+export const GET = async () => {
   try {
-    const tokenNext = await getToken({
-      req,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
-    if (
-      !tokenNext ||
-      !tokenNext.id ||
-      typeof tokenNext.id !== "string" ||
-      !mongoose.Types.ObjectId.isValid(tokenNext.id)
-    ) {
-      return NextResponse.json(
-        { ok: false, error: errorMessages.relogAcc },
-        { status: 400 },
-      );
-    }
-    const categories = await getUserCategories(tokenNext.id);
-    return NextResponse.json(
-      { ok: true, categories },
-      {
-        status: 200,
-      },
-    );
+    const categories = await getUserCategories(LOCAL_USER_ID);
+    return NextResponse.json({ ok: true, categories }, { status: 200 });
   } catch (err) {
-    const errorMessage =
-      err instanceof Error ? err.message : errorMessages.retrieveCategories;
-    return NextResponse.json(
-      { ok: false, error: errorMessage },
-      { status: 500 },
-    );
+    const errorMessage = err instanceof Error ? err.message : errorMessages.retrieveCategories;
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
 };

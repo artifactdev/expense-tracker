@@ -1,32 +1,47 @@
-"use client";
+'use client';
 
-import { ColumnDef } from "@tanstack/react-table";
-import type { TransactionBulk } from "@/types";
-import { AmountCell } from "../amount-cell";
-import { CategoriesComboboxInput } from "@/components/tables/add-transactions-tables/categories-combobox-input";
+import { ColumnDef } from '@tanstack/react-table';
+
+import { CategoriesComboboxInput } from '@/components/tables/add-transactions-tables/categories-combobox-input';
+import type { TransactionBulk } from '@/types';
+import { AmountCell } from '../amount-cell';
 
 export const columns: ColumnDef<TransactionBulk>[] = [
   {
-    accessorKey: "Concept",
-    header: "NAME",
+    accessorKey: 'Concept',
+    header: 'NAME',
   },
   {
-    accessorKey: "Amount",
-    header: "AMOUNT",
+    accessorKey: 'Counterparty',
+    header: 'COUNTERPARTY',
     cell: ({ getValue }) => (
-      <AmountCell textLeft amount={getValue() as string} />
+      <div className='min-w-[120px] max-w-[200px] truncate text-xs text-muted-foreground'>
+        {(getValue() as string) ?? '—'}
+      </div>
     ),
   },
   {
-    accessorKey: "Date",
-    header: "DATE",
+    accessorKey: 'Amount',
+    header: 'AMOUNT',
+    cell: ({ getValue }) => <AmountCell textLeft amount={getValue() as string} />,
+  },
+  {
+    accessorKey: 'Date',
+    header: 'DATE',
+    cell: ({ getValue }) => <div className='min-w-[90px]'>{getValue() as string}</div>,
+  },
+  {
+    accessorKey: 'Account',
+    header: 'ACCOUNT',
     cell: ({ getValue }) => (
-      <div className="min-w-[90px]">{getValue() as string}</div>
+      <div className='min-w-[100px] max-w-[160px] truncate font-mono text-xs text-muted-foreground'>
+        {(getValue() as string) ?? '—'}
+      </div>
     ),
   },
   {
-    accessorKey: "Categories",
-    header: "CATEGORIES",
+    accessorKey: 'Categories',
+    header: 'CATEGORIES',
     cell: ({ row }) => (
       <CategoriesComboboxInput
         selectedCategories={row.original.selectedCategories ?? []}
@@ -35,7 +50,7 @@ export const columns: ColumnDef<TransactionBulk>[] = [
     ),
   },
   {
-    accessorKey: "Notes",
-    header: "NOTES",
+    accessorKey: 'Notes',
+    header: 'NOTES',
   },
 ];

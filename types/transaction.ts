@@ -1,5 +1,3 @@
-import mongoose from 'mongoose';
-
 import type { EnhancedCategory } from './categories';
 import type { User } from './user';
 
@@ -15,6 +13,8 @@ export interface TransactionObj {
   date: string;
   categories: Category[];
   notes?: string;
+  counterparty?: string;
+  account?: string;
 }
 
 export type TransactionObjBack = TransactionObj & {
@@ -36,6 +36,9 @@ export interface TransactionBulk {
   Date: string;
   Concept: string;
   Amount: string;
+  CreditDebit?: string;
+  Counterparty?: string;
+  Account?: string;
   Notes?: string;
   selectedCategories?: EnhancedCategory[];
 }
@@ -58,6 +61,8 @@ export interface TransactionEndpointBody {
   date: string;
   selectedCategories: Category[];
   notes?: string;
+  counterparty?: string;
+  account?: string;
 }
 
 export interface TransactionBulkResponse {
@@ -67,10 +72,15 @@ export interface TransactionBulkResponse {
   updatedUser?: User;
 }
 
+export type TransactionsDateObj = {
+  from: string;
+  to: string;
+};
+
 export interface TransactionDeleteReponse {
   ok: boolean;
   error?: string;
-  result?: mongoose.mongo.DeleteResult;
+  result?: { acknowledged: boolean; deletedCount: number };
   deletedCount?: number;
 }
 

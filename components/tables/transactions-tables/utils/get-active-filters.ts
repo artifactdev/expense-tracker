@@ -1,6 +1,6 @@
 type ActiveFiltersParams = {
-  startDate: string;
-  endDate: string;
+  startDate?: string | null;
+  endDate?: string | null;
   transType?: string;
   filterType?: string;
   filterOperator?: string;
@@ -10,7 +10,9 @@ type ActiveFiltersParams = {
 
 export const getActiveFilters = (params: ActiveFiltersParams) => {
   const filterDescriptions: string[] = [
-    `Filtering transactions from ${params.startDate} to ${params.endDate}`,
+    params.startDate && params.endDate
+      ? `Filtering transactions from ${params.startDate} to ${params.endDate}`
+      : 'Showing all transactions',
   ];
 
   if (params.transType) {
@@ -20,20 +22,14 @@ export const getActiveFilters = (params: ActiveFiltersParams) => {
   if (params.filterType && params.filterValue) {
     filterDescriptions.push(
       `by ${params.filterType.toLowerCase()} (${
-        !params.filterOperator
-          ? ""
-          : params.filterOperator === "gt"
-          ? "> "
-          : "< "
-      }${params.filterValue})`,
+        !params.filterOperator ? '' : params.filterOperator === 'gt' ? '> ' : '< '
+      }${params.filterValue})`
     );
   }
 
   if (params.categories && params.categories.length) {
-    filterDescriptions.push(
-      `displaying the categories: ${params.categories.join(", ")}`,
-    );
+    filterDescriptions.push(`displaying the categories: ${params.categories.join(', ')}`);
   }
 
-  return filterDescriptions.join(", ");
+  return filterDescriptions.join(', ');
 };

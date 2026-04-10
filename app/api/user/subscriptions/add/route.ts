@@ -1,11 +1,10 @@
-import { getToken } from 'next-auth/jwt';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 
 import { CreateSubSchema } from '@/schemas/create-subscription-schema';
 import { addSubscriptionToUser } from '@/services/user';
 import type { EnhancedSubscription } from '@/types';
-import { errorMessages } from '@/utils/const';
+import { errorMessages, LOCAL_USER_ID } from '@/utils/const';
 
 interface ReqObjI {
   subscriptionData: EnhancedSubscription;
@@ -18,23 +17,16 @@ export const POST = async (req: NextRequest) => {
   try {
     CreateSubSchema.parse(subscriptionData);
 
-    const tokenNext = await getToken({
-      req,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
-    if (!tokenNext || !tokenNext.id) {
-      return NextResponse.json({ ok: false, error: errorMessages.relogAcc }, { status: 400 });
-    }
     const parsedSubData = { ...subscriptionData };
     // @ts-expect-error deleting _id property
     delete parsedSubData._id;
 
-    const updatedUser = await addSubscriptionToUser({
-      userId: tokenNext.id as string,
+    const newSubscription = await addSubscriptionToUser({
+      userId: LOCAL_USER_ID,
       subscription: parsedSubData,
     });
 
-    return NextResponse.json({ ok: true, updatedUser }, { status: 201 });
+    return NextResponse.json({ ok: true, subscription: newSubscription }, { status: 201 });
   } catch (err) {
     console.log('ERROR ADDING SUBSCRIPTION TO THE USER', err);
     if (err instanceof z.ZodError) {

@@ -12,9 +12,8 @@ import {
   PaginationState,
   useReactTable,
 } from '@tanstack/react-table';
-import { format, subYears } from 'date-fns';
+import { endOfMonth, format, startOfMonth } from 'date-fns';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { useSession } from 'next-auth/react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { DateRange } from 'react-day-picker';
 
@@ -76,7 +75,6 @@ export const TransactionsTable = <TData,>({
 }: DataTableProps<TData>) => {
   const [date, setDate] = React.useState<DateRange | undefined>(undefined);
   const { fetchPetition } = useFetch();
-  const { update: sessionUpdate } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -264,8 +262,8 @@ export const TransactionsTable = <TData,>({
     } else {
       onSetDate(
         {
-          from: subYears(new Date(), 1),
-          to: new Date(),
+          from: startOfMonth(new Date()),
+          to: endOfMonth(new Date()),
         },
         fallbackPage
       );
@@ -302,7 +300,24 @@ export const TransactionsTable = <TData,>({
         ...prev,
         pageIndex: initPage ? initPage - 1 : DEFAULT_PAGE - 1,
       }));
-      await sessionUpdate({ transDates: { from, to } });
+    } else if (!dateRange) {
+      // Clear: remove date params and wipe stored dates → show all transactions
+      router.push(
+        `${pathname}?${createQueryString({
+          page: DEFAULT_PAGE,
+          limit: pageSize,
+          startDate: null,
+          endDate: null,
+        })}`,
+        { scroll: false }
+      );
+      await fetchPetition({
+        url: URL_UPDATE_USER_TRANS_DATES,
+        method: 'POST',
+        body: { dates: null },
+      });
+      setPagination(prev => ({ ...prev, pageIndex: DEFAULT_PAGE - 1 }));
+      router.refresh();
     }
   };
 

@@ -1,17 +1,17 @@
-"use client";
+'use client';
 
-import { AccordionBlock } from "./accordion-block";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import type { CustomSessionI } from "@/types";
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { LOCAL_USER_ID } from '@/utils/const';
+import { AccordionBlock } from './accordion-block';
 
 interface ProfileBlockProps {
-  session: CustomSessionI;
+  user?: { id: string; name: string | null } | null;
 }
 
-export const ProfileBlock = ({ session }: ProfileBlockProps) => {
+export const ProfileBlock = ({ user }: ProfileBlockProps) => {
   return (
-    <ScrollArea className="h-[calc(100vh-250px)]">
-      <AccordionBlock userId={session.user?.id ?? ""} />
+    <ScrollArea className='h-[calc(100vh-250px)]'>
+      <AccordionBlock userId={user?.id ?? LOCAL_USER_ID} />
     </ScrollArea>
   );
 };

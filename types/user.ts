@@ -1,17 +1,20 @@
-import { IUser } from '@/models';
 import { Subscription } from '@/types/subscriptions';
 import { Categories } from './categories';
+
+export interface LocalUser {
+  id: string;
+  name: string;
+  email: string;
+  currency: string;
+  dateFormat: string;
+  theme: string;
+  transactionsDateFrom?: string | null;
+  transactionsDateTo?: string | null;
+}
 
 export interface ResponseUser {
   ok: boolean;
   error?: string;
-  createdUser?: User;
-}
-
-export interface ResponseRegisterMail {
-  ok: boolean;
-  error?: string;
-  message?: string;
 }
 
 export interface User {
@@ -30,21 +33,9 @@ export interface User {
   };
 }
 
-export interface ResetPasswordResponse {
-  ok: boolean;
-  error?: string;
-  message?: string;
-}
-
 export interface UpdateUserPreferencesResponse {
   ok: boolean;
-  updatedUser?: IUser;
+  updatedUser?: LocalUser;
   error?: string;
   message?: string;
-}
-
-export interface ChangeEmailResponse {
-  ok: boolean;
-  message?: string;
-  error?: string;
 }

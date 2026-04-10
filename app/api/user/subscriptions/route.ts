@@ -1,18 +1,11 @@
-import { getToken } from 'next-auth/jwt';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 import { getUsersSubscriptions } from '@/services/user';
-import { errorMessages } from '@/utils/const';
+import { errorMessages, LOCAL_USER_ID } from '@/utils/const';
 
-export const GET = async (req: NextRequest) => {
+export const GET = async () => {
   try {
-    const tokenNext = await getToken({
-      req,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
-
-    const subscriptions = await getUsersSubscriptions(tokenNext?.id as string);
-
+    const subscriptions = await getUsersSubscriptions(LOCAL_USER_ID);
     return NextResponse.json({ ok: true, subscriptions }, { status: 200 });
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : errorMessages.retrieveSubscriptions;

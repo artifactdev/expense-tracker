@@ -1,90 +1,69 @@
-"use client";
+'use client';
 
-import * as React from "react";
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { ScrollArea } from "../../ui/scroll-area";
-import { getEllipsed } from "@/utils/const";
-import { useAddTransactionTable } from "@/hooks/use-add-transaction-table";
-import type { EnhancedCategory } from "@/types";
+import * as React from 'react';
+
+import { Check, ChevronsUpDown, Plus } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Command, CommandGroup, CommandInput, CommandItem } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useAddTransactionTable } from '@/hooks/use-add-transaction-table';
+import { cn } from '@/lib/utils';
+import type { EnhancedCategory } from '@/types';
+import { getEllipsed } from '@/utils/const';
+import { ScrollArea } from '../../ui/scroll-area';
 
 type CategoriesComboboxInputProps = {
   selectedCategories: EnhancedCategory[];
   selectedRow: number;
 };
 
-const WIDTH = "w-[225px]";
+const WIDTH = 'w-[225px]';
 
 export const CategoriesComboboxInput = ({
   selectedCategories,
   selectedRow,
 }: CategoriesComboboxInputProps) => {
-  const [currentInput, setCurrentInput] = React.useState("");
+  const [currentInput, setCurrentInput] = React.useState('');
   const [open, setOpen] = React.useState(false);
   const { userCategories, setUserCategories, updateTransactionCategories } =
     useAddTransactionTable();
 
   const categories = React.useMemo(
     () =>
-      userCategories.map((category) => ({
+      userCategories.map(category => ({
         value: category.id,
         label: category.name,
       })),
-    [userCategories],
+    [userCategories]
   );
 
   const updateUserCategories = React.useCallback(
     (newObj: EnhancedCategory) => {
-      setUserCategories((prevState) => [...prevState, newObj]);
+      setUserCategories(prevState => [...prevState, newObj]);
     },
-    [setUserCategories],
+    [setUserCategories]
   );
 
   const handleSelect = React.useCallback(
     (catObj: { value: string; label: string }) => {
-      const isAlreadySelected = selectedCategories.some(
-        (cat) => cat.id === catObj.value,
-      );
+      const isAlreadySelected = selectedCategories.some(cat => cat.id === catObj.value);
 
       let newSelectedCategories: EnhancedCategory[];
       if (isAlreadySelected) {
-        newSelectedCategories = selectedCategories.filter(
-          (cat) => cat.id !== catObj.value,
-        );
+        newSelectedCategories = selectedCategories.filter(cat => cat.id !== catObj.value);
       } else {
-        const categoryToAdd = userCategories.find(
-          (cat) => cat.id === catObj.value,
-        );
+        const categoryToAdd = userCategories.find(cat => cat.id === catObj.value);
         if (categoryToAdd) {
           newSelectedCategories = [...selectedCategories, categoryToAdd];
         } else {
-          newSelectedCategories = [
-            ...selectedCategories,
-            { id: catObj.value, name: catObj.label },
-          ];
+          newSelectedCategories = [...selectedCategories, { id: catObj.value, name: catObj.label }];
         }
       }
 
       updateTransactionCategories(selectedRow, newSelectedCategories);
     },
-    [
-      selectedCategories,
-      updateTransactionCategories,
-      selectedRow,
-      userCategories,
-    ],
+    [selectedCategories, updateTransactionCategories, selectedRow, userCategories]
   );
 
   const onAddNewCategory = React.useCallback(() => {
@@ -92,7 +71,7 @@ export const CategoriesComboboxInput = ({
     if (!newValue) return;
 
     const existingCategory = userCategories.find(
-      (cat) => cat.name.toLowerCase() === newValue.toLowerCase(),
+      cat => cat.name.toLowerCase() === newValue.toLowerCase()
     );
 
     if (existingCategory) {
@@ -102,9 +81,9 @@ export const CategoriesComboboxInput = ({
         label: existingCategory.name,
       });
     } else {
-      // Create a new category and add it
+      // Create a new category with a stable temporary ID
       const newCat: EnhancedCategory = {
-        id: String(userCategories.length + 1),
+        id: crypto.randomUUID(),
         name: newValue,
         newEntry: true,
       };
@@ -113,11 +92,12 @@ export const CategoriesComboboxInput = ({
       updateTransactionCategories(selectedRow, [...selectedCategories, newCat]);
     }
 
-    setCurrentInput("");
+    setCurrentInput('');
   }, [
     currentInput,
     userCategories,
     selectedRow,
+    selectedCategories,
     updateUserCategories,
     updateTransactionCategories,
     setCurrentInput,
@@ -128,54 +108,45 @@ export const CategoriesComboboxInput = ({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
-          role="combobox"
+          variant='outline'
+          role='combobox'
           aria-expanded={open}
           className={`${WIDTH} justify-between ${getEllipsed}`}
         >
           {selectedCategories.length === 1
             ? `${selectedCategories[0].name} selected`
             : selectedCategories.length > 1
-            ? `${selectedCategories.length} categories`
-            : `Select categories...`}
-          <ChevronsUpDown className="w-4 h-4 ml-2 opacity-50 shrink-0" />
+              ? `${selectedCategories.length} categories`
+              : `Select categories...`}
+          <ChevronsUpDown className='ml-2 h-4 w-4 shrink-0 opacity-50' />
         </Button>
       </PopoverTrigger>
       <PopoverContent className={`${WIDTH} p-0`}>
         <Command>
           <CommandInput
             placeholder={`Search a category...`}
-            onValueChange={(value) => setCurrentInput(value)}
+            onValueChange={value => setCurrentInput(value)}
             value={currentInput}
           />
           <ScrollArea maxHeight={225}>
             <CommandGroup>
-              {categories.map((cat) => (
-                <CommandItem
-                  key={cat.value}
-                  value={cat.label}
-                  onSelect={() => handleSelect(cat)}
-                >
+              {categories.map(cat => (
+                <CommandItem key={cat.value} value={cat.label} onSelect={() => handleSelect(cat)}>
                   <Check
                     className={cn(
-                      "mr-2 h-4 w-4",
-                      selectedCategories.find(
-                        (category) => category.id === cat.value,
-                      )
-                        ? "opacity-100"
-                        : "opacity-0",
+                      'mr-2 h-4 w-4',
+                      selectedCategories.find(category => category.id === cat.value)
+                        ? 'opacity-100'
+                        : 'opacity-0'
                     )}
                   />
                   {cat.label}
                 </CommandItem>
               ))}
             </CommandGroup>
-            <CommandGroup className="border-t">
-              <CommandItem
-                onSelect={onAddNewCategory}
-                className="text-green-500"
-              >
-                <Plus className="w-4 h-4 mr-2" />
+            <CommandGroup className='border-t'>
+              <CommandItem onSelect={onAddNewCategory} className='text-green-500'>
+                <Plus className='mr-2 h-4 w-4' />
                 Add &apos;{currentInput}&apos;
               </CommandItem>
             </CommandGroup>

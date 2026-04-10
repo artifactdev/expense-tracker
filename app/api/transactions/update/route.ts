@@ -1,12 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
-import { errorMessages } from "@/utils/const";
-import type { TransactionObj } from "@/types";
-import TransactionModel from "@/models/transaction/transaction-model";
-import CategoriesModel from "@/models/categories/categories-model";
-import { capitalizeFirstLetter } from "@/utils/capitalize-first-letter";
-import { IUser } from "@/models";
-import mongoose from "mongoose";
-import UserModel from "@/models/user/user-model";
+import { NextRequest, NextResponse } from 'next/server';
+
+import { prisma } from '@/lib/prisma';
+import type { TransactionObj } from '@/types';
+import { capitalizeFirstLetter } from '@/utils/capitalize-first-letter';
+import { errorMessages, LOCAL_USER_ID } from '@/utils/const';
 
 export interface EnhancedTransObj extends TransactionObj {
   id: string;
@@ -21,54 +18,60 @@ export const POST = async (req: NextRequest) => {
     const { transaction } = (await req.json()) as ReqBody;
     const { id, categories, ...transactionData } = transaction;
 
-    // Retrieve the transaction and the user associated with it
-    const existingTransaction =
-      await TransactionModel.findById(id).populate("userId");
-    if (!existingTransaction) throw new Error("Transaction not found");
-    const user = existingTransaction.userId as unknown as IUser;
+    const processedCategoryIds = await Promise.all(
+      categories.map(async category => {
+        if (!category.newEntry) return category.id as string;
 
-    // Process each category
-    const processedCategories = await Promise.all(
-      categories.map(async (category) => {
-        // Return existing category ID (parsed to ObjectId)
-        if (!category.newEntry) return new mongoose.Types.ObjectId(category.id);
-
-        // Check if the category already exists (case insensitive)
-        let existingCategory = await CategoriesModel.findOne({
-          name: { $regex: new RegExp("^" + category.name + "$", "i") },
+        const existing = await prisma.category.findFirst({
+          where: { name: { equals: category.name } },
         });
-
-        if (!existingCategory) {
-          // Create new category
-          existingCategory = await new CategoriesModel({
-            name: capitalizeFirstLetter(category.name),
-          }).save();
-        }
-        // Update user's categories if the new category is not already associated
-        if (!user.categories.includes(existingCategory._id)) {
-          await UserModel.findByIdAndUpdate(user._id, {
-            $addToSet: { categories: existingCategory._id },
+        if (existing) {
+          await prisma.userCategory.upsert({
+            where: { userId_categoryId: { userId: LOCAL_USER_ID, categoryId: existing.id } },
+            update: {},
+            create: { userId: LOCAL_USER_ID, categoryId: existing.id },
           });
+          return existing.id;
         }
-        return existingCategory._id;
-      }),
+        const created = await prisma.category.create({
+          data: {
+            name: capitalizeFirstLetter(category.name),
+            slug: category.name.toLowerCase().replace(/\s+/g, '-'),
+          },
+        });
+        await prisma.userCategory.create({
+          data: { userId: LOCAL_USER_ID, categoryId: created.id },
+        });
+        return created.id;
+      })
     );
 
-    const updated = await TransactionModel.findByIdAndUpdate(
-      id,
-      {
-        ...transactionData,
-        categories: processedCategories,
-      },
-      { new: true },
-    );
+    const updated = await prisma.$transaction(async tx => {
+      await tx.transactionCategory.deleteMany({ where: { transactionId: id } });
+      return tx.transaction.update({
+        where: { id },
+        data: {
+          ...transactionData,
+          categories: { create: processedCategoryIds.map(cid => ({ categoryId: cid })) },
+        },
+        include: { categories: { include: { category: true } } },
+      });
+    });
 
     return NextResponse.json({ ok: true, data: updated }, { status: 200 });
   } catch (err) {
-    console.log("ERROR UPDATING TRANSACTION", err);
+    console.log('ERROR UPDATING TRANSACTION', err);
     return NextResponse.json(
       { ok: false, error: errorMessages.updateTransaction },
-      { status: 500 },
+      { status: 500 }
     );
   }
 };
+
+export interface EnhancedTransObj extends TransactionObj {
+  id: string;
+}
+
+interface ReqBody {
+  transaction: EnhancedTransObj;
+}

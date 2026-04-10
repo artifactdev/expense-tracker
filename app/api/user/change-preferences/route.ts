@@ -1,57 +1,41 @@
-import connectDb from "@/lib/mongoose-config";
-import UserModel, { IUser } from "@/models/user/user-model";
-import { errorMessages } from "@/utils/const";
-import { NextRequest, NextResponse } from "next/server";
-import { getToken } from "next-auth/jwt";
-import { UpdatePreferencesSchema } from "@/schemas/update-preferences-schema";
-import { z } from "zod";
+import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 
-type ReqObjI = Partial<IUser>;
+import { prisma } from '@/lib/prisma';
+import { UpdatePreferencesSchema } from '@/schemas/update-preferences-schema';
+import { errorMessages, LOCAL_USER_ID } from '@/utils/const';
+
+type ReqObjI = {
+  currency?: string;
+  dateFormat?: string;
+  theme?: string;
+};
 
 export const POST = async (req: NextRequest) => {
   const data = (await req.json()) as ReqObjI;
 
   try {
     UpdatePreferencesSchema.parse(data);
-    await connectDb();
 
-    const tokenNext = await getToken({
-      req,
-      secret: process.env.NEXTAUTH_SECRET,
+    const updatedUser = await prisma.user.update({
+      where: { id: LOCAL_USER_ID },
+      data: {
+        ...(data.currency && { currency: data.currency }),
+        ...(data.dateFormat && { dateFormat: data.dateFormat }),
+        ...(data.theme && { theme: data.theme }),
+      },
     });
-    if (!tokenNext || !tokenNext.id) {
-      return NextResponse.json(
-        { ok: false, error: errorMessages.relogAcc },
-        { status: 400 },
-      );
-    }
-
-    const updatedUser = await UserModel.findByIdAndUpdate(
-      tokenNext.id,
-      data,
-    ).lean();
 
     return NextResponse.json(
-      {
-        ok: true,
-        updatedUser,
-        message: "Preferences successfully updated",
-      },
-      { status: 200 },
+      { ok: true, updatedUser, message: 'Preferences successfully updated' },
+      { status: 200 }
     );
   } catch (err) {
-    console.log("ERROR UPDATING PREFERNECES", err);
+    console.log('ERROR UPDATING PREFERENCES', err);
     if (err instanceof z.ZodError) {
-      return NextResponse.json(
-        { ok: false, error: errorMessages.incorrectData },
-        { status: 400 },
-      );
+      return NextResponse.json({ ok: false, error: errorMessages.incorrectData }, { status: 400 });
     }
-    const errorMessage =
-      err instanceof Error ? err.message : errorMessages.updatingPreferences;
-    return NextResponse.json(
-      { ok: false, error: errorMessage },
-      { status: 500 },
-    );
+    const errorMessage = err instanceof Error ? err.message : errorMessages.updatingPreferences;
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
 };

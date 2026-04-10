@@ -1,44 +1,54 @@
-import mongoose from "mongoose";
-import { cache } from "react";
-import connectDb from "@/lib/mongoose-config";
-import { TransactionObjBack } from "@/types/transaction";
-import TransactionModel from "@/models/transaction/transaction-model";
-import { errorMessages } from "@/utils/const";
-import { isInvalidUserId } from "@/utils/is-invalid-user-id";
-import CategoriesModel from "@/models/categories/categories-model";
-import type { Categories } from "@/types";
-import { z } from "zod";
-import { FilteredTransactionsSchema } from "@/schemas/filtered-transactions-schema";
-import { IUser } from "@/models";
-import { capitalizeFirstLetter } from "@/utils/capitalize-first-letter";
-import UserModel from "@/models/user/user-model";
-import { type EnhancedTransObj } from "@/app/api/transactions/update/route";
-import "@/models/categories/categories-model";
+import { cache } from 'react';
+
+import { z } from 'zod';
+
+import { prisma } from '@/lib/prisma';
+import { FilteredTransactionsSchema } from '@/schemas/filtered-transactions-schema';
+import type { Categories } from '@/types';
+import type { TransactionObjBack } from '@/types/transaction';
+import { capitalizeFirstLetter } from '@/utils/capitalize-first-letter';
+import { errorMessages } from '@/utils/const';
 
 type FilteredTransactions = z.infer<typeof FilteredTransactionsSchema>;
 
-type QueryTransType = {
+/** Maps a Prisma transaction row to the shared TransactionObjBack shape */
+function mapTransaction(t: {
+  id: string;
   userId: string;
-  date: { $gte: string; $lte: string };
-  amount?: Partial<{ $gte: number; $lt: number; $gt: number }>;
-  $or?: Array<{ name?: { $regex: RegExp }; notes?: { $regex: RegExp } }>;
-  categories?: { $in: (string | mongoose.Types.ObjectId)[] };
-};
+  name: string;
+  amount: number;
+  date: string;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  categories: { category: { id: string; name: string; common: boolean } }[];
+}): TransactionObjBack {
+  return {
+    id: t.id,
+    userId: t.userId,
+    name: t.name,
+    amount: t.amount,
+    date: t.date,
+    notes: t.notes ?? undefined,
+    categories: t.categories.map(tc => ({
+      id: tc.category.id,
+      name: tc.category.name,
+      common: tc.category.common,
+    })),
+    createdAt: t.createdAt.toISOString(),
+    updatedAt: t.updatedAt.toISOString(),
+  };
+}
 
-export const revalidate = 3600; // revalidate the data at most every hour
+export const revalidate = 3600;
+
 export const getAllTransactionsPerUser = cache(async (userId: string) => {
-  if (isInvalidUserId(userId)) {
-    throw new Error(errorMessages.invalidUserId);
-  }
-
-  await connectDb();
-  const transactions = await TransactionModel.find({ userId })
-    .sort({ date: -1 })
-    .populate("categories");
-  const parsedTransactions = JSON.parse(
-    JSON.stringify(transactions),
-  ) as TransactionObjBack[];
-  return { ok: true, transactions: parsedTransactions };
+  const transactions = await prisma.transaction.findMany({
+    where: { userId },
+    orderBy: { date: 'desc' },
+    include: { categories: { include: { category: true } } },
+  });
+  return { ok: true, transactions: transactions.map(mapTransaction) };
 });
 
 export const getFilteredTransactions = async ({
@@ -64,70 +74,59 @@ export const getFilteredTransactions = async ({
     filteredCategories,
   });
 
-  if (isInvalidUserId(userId)) {
-    throw new Error(errorMessages.invalidUserId);
+   
+  const where: Record<string, any> = { userId };
+
+  if (startDate && endDate) {
+    where.date = { gte: startDate, lte: endDate };
   }
 
-  await connectDb();
-
-  const query: QueryTransType = {
-    userId,
-    date: { $gte: startDate, $lte: endDate },
-  };
-
-  if (transType === "incomes") {
-    query.amount = { $gte: 0 };
-  } else if (transType === "expenses") {
-    query.amount = { $lt: 0 };
+  if (transType === 'incomes') {
+    where.amount = { gte: 0 };
+  } else if (transType === 'expenses') {
+    where.amount = { lt: 0 };
   }
 
-  if (filteredCategories) {
-    // Retrieving the categories ID list
-    const categories = await CategoriesModel.find({
-      name: { $in: filteredCategories },
-    });
-    const parsedCategories = JSON.parse(
-      JSON.stringify(categories),
-    ) as Categories[];
-    const categoriesIdList = parsedCategories.map((cat) => cat.id);
-
-    query.categories = {
-      $in: categoriesIdList.map(
-        (id: string) => new mongoose.Types.ObjectId(id),
-      ),
-    };
-  }
-
-  if (filterType === "Amount" && Number(filterValue)) {
-    query.amount = {
-      [filterOperator === "gt" ? "$gt" : "$lt"]: Number(filterValue),
-    };
-  } else if (filterType === "Name" && filterValue) {
-    query.$or = [
-      { name: { $regex: new RegExp(filterValue, "i") } },
-      { notes: { $regex: new RegExp(filterValue, "i") } },
+  if (filterType === 'Amount' && filterValue && Number(filterValue)) {
+    where.amount = { [filterOperator === 'gt' ? 'gt' : 'lt']: Number(filterValue) };
+  } else if (filterType === 'Name' && filterValue) {
+    where.OR = [
+      { name: { contains: filterValue, mode: 'insensitive' } },
+      { notes: { contains: filterValue, mode: 'insensitive' } },
     ];
   }
 
-  const totalCount = await TransactionModel.countDocuments(query);
+  if (filteredCategories && filteredCategories.length > 0) {
+    const catRecords = await prisma.category.findMany({
+      where: { name: { in: filteredCategories } },
+      select: { id: true },
+    });
+    const categoryIds = catRecords.map(c => c.id);
+    where.categories = { some: { categoryId: { in: categoryIds } } };
+  }
 
-  const transactions =
+  const include = { categories: { include: { category: true } } };
+
+  const [totalCount, rows] =
     offset !== undefined && limit !== undefined
-      ? await TransactionModel.find(query)
-          .sort({ date: -1 })
-          .skip(offset)
-          .limit(limit)
-          .populate("categories")
-      : await TransactionModel.find(query)
-          .sort({ date: -1 })
-          .populate("categories");
+      ? await Promise.all([
+          prisma.transaction.count({ where }),
+          prisma.transaction.findMany({
+            where,
+            orderBy: { date: 'desc' },
+            skip: offset,
+            take: limit,
+            include,
+          }),
+        ])
+      : await Promise.all([
+          prisma.transaction.count({ where }),
+          prisma.transaction.findMany({ where, orderBy: { date: 'desc' }, include }),
+        ]);
 
-  const parsedTransactions = JSON.parse(
-    JSON.stringify(transactions),
-  ) as TransactionObjBack[];
   return {
     ok: true,
-    data: { list: parsedTransactions, totalCount },
+    data: { list: rows.map(mapTransaction), totalCount },
     error: null,
   };
 };
@@ -137,112 +136,89 @@ export const deleteTransactionsInBulk = async ({
   transactions,
 }: {
   userId: string;
-  transactions: {
-    transactionIds: string;
-    categoriesId: Categories[];
-  }[];
+  transactions: { transactionIds: string; categoriesId: Categories[] }[];
 }) => {
-  await connectDb();
-  const transactionsObjectId = transactions.map(
-    (obj) => new mongoose.Types.ObjectId(obj.transactionIds),
-  );
+  const ids = transactions.map(t => t.transactionIds);
 
-  const resultDeleted = await TransactionModel.deleteMany({
-    _id: { $in: transactionsObjectId },
-  });
+  const deletedCount = await prisma.$transaction(async tx => {
+    // Remove junction rows first (cascade handles it but being explicit)
+    await tx.transactionCategory.deleteMany({ where: { transactionId: { in: ids } } });
+    const result = await tx.transaction.deleteMany({ where: { id: { in: ids }, userId } });
 
-  const allCategoryIds = [
-    //@ts-ignore
-    ...new Set(
-      transactions.flatMap((transaction) =>
-        transaction.categoriesId
-          .filter((cat) => !cat.common) // not deleting the commons categories on the user prop
-          .map((category) => category.id),
+    // For non-common categories: remove from UserCategory if no transactions left
+    const allCategoryIds = [
+      ...new Set(
+        transactions.flatMap(t =>
+          t.categoriesId.filter(cat => !cat.common).map(cat => cat.id as string)
+        )
       ),
-    ),
-  ].map((id: string) => new mongoose.Types.ObjectId(id));
+    ];
+    for (const catId of allCategoryIds) {
+      const remaining = await tx.transactionCategory.count({
+        where: { categoryId: catId, transaction: { userId } },
+      });
+      if (remaining === 0) {
+        await tx.userCategory.deleteMany({ where: { userId, categoryId: catId } });
+      }
+    }
 
-  const countedTransactionsPromiseArray = allCategoryIds.map(async (catId) => {
-    const count = await TransactionModel.countDocuments({
-      userId: new mongoose.Types.ObjectId(userId),
-      categories: { $in: catId },
-    });
-    return { catId, count };
+    return result.count;
   });
-  const countedTransactions = await Promise.all(
-    countedTransactionsPromiseArray,
-  );
 
-  const categoriesToRemove = countedTransactions
-    .filter((trans) => trans.count <= 0)
-    .map((cat) => cat.catId);
-
-  await UserModel.findByIdAndUpdate(
-    userId,
-    {
-      $pullAll: {
-        categories: categoriesToRemove,
-      },
-    },
-    { new: true },
-  );
-
-  return {
-    ok: true,
-    result: resultDeleted,
-    deletedCount: resultDeleted.deletedCount,
-  };
+  return { ok: true, deletedCount };
 };
 
-interface UpdateSingleTransactionParams {
-  transaction: EnhancedTransObj;
-}
 export const updateSingleTransaction = async ({
   transaction,
-}: UpdateSingleTransactionParams) => {
-  const { id, categories, ...transactionData } = transaction;
+}: {
+  transaction: TransactionObjBack & { id: string };
+}) => {
+  const { id, categories, userId, createdAt, updatedAt, ...data } = transaction;
 
-  // Retrieve the transaction and the user associated with it
-  const existingTransaction =
-    await TransactionModel.findById(id).populate("userId");
-  if (!existingTransaction)
-    throw new Error("Transaction not found. Please relog into your account");
-  const user = existingTransaction.userId as unknown as IUser;
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { categories: { include: { category: true } } },
+  });
+  if (!user) throw new Error(errorMessages.generic);
 
-  // Process each category
-  const processedCategories = await Promise.all(
-    categories.map(async (category) => {
-      // Return existing category ID (parsed to ObjectId)
-      if (!category.newEntry) return new mongoose.Types.ObjectId(category.id);
+  const processedCategoryIds = await Promise.all(
+    categories.map(async cat => {
+      if (!('newEntry' in cat) || !cat.newEntry) return cat.id as string;
 
-      // Check if the category already exists (case insensitive)
-      let existingCategory = await CategoriesModel.findOne({
-        name: { $regex: new RegExp("^" + category.name + "$", "i") },
+      // Find or create the category
+      const existing = await prisma.category.findFirst({
+        where: { name: { equals: cat.name } },
       });
-
-      if (!existingCategory) {
-        // Create new category
-        existingCategory = await new CategoriesModel({
-          name: capitalizeFirstLetter(category.name),
-        }).save();
-      }
-      // Update user's categories if the new category is not already associated
-      if (!user.categories.includes(existingCategory._id)) {
-        await UserModel.findByIdAndUpdate(user._id, {
-          $addToSet: { categories: existingCategory._id },
+      if (existing) {
+        await prisma.userCategory.upsert({
+          where: { userId_categoryId: { userId, categoryId: existing.id } },
+          update: {},
+          create: { userId, categoryId: existing.id },
         });
+        return existing.id;
       }
-      return existingCategory._id;
-    }),
+      const created = await prisma.category.create({
+        data: {
+          name: capitalizeFirstLetter(cat.name),
+          slug: cat.name.toLowerCase().replace(/\s+/g, '-'),
+        },
+      });
+      await prisma.userCategory.create({ data: { userId, categoryId: created.id } });
+      return created.id;
+    })
   );
 
-  const updated = await TransactionModel.findByIdAndUpdate(
-    id,
-    {
-      ...transactionData,
-      categories: processedCategories,
-    },
-    { new: true },
-  );
-  return updated;
+  const updated = await prisma.$transaction(async tx => {
+    await tx.transactionCategory.deleteMany({ where: { transactionId: id } });
+    return tx.transaction.update({
+      where: { id },
+      data: {
+        ...data,
+        categories: { create: processedCategoryIds.map(cid => ({ categoryId: cid })) },
+      },
+      include: { categories: { include: { category: true } } },
+    });
+  });
+
+  return { ok: true, data: mapTransaction(updated) };
 };

@@ -1,24 +1,13 @@
-import connectDb from "@/lib/mongoose-config";
-import CategoriesModel from "@/models/categories/categories-model";
-import type { Categories } from "@/types";
-import { errorMessages } from "@/utils/const";
-import { isInvalidUserId } from "@/utils/is-invalid-user-id";
+import { prisma } from '@/lib/prisma';
 
 type Args = {
-  userId: string;
   categoriesNames: string[];
 };
-export const getCategoriesId = async ({ userId, categoriesNames }: Args) => {
-  if (isInvalidUserId(userId)) {
-    throw new Error(errorMessages.invalidUserId);
-  }
 
-  await connectDb();
-  const categories = await CategoriesModel.find({
-    name: { $in: categoriesNames },
+export const getCategoriesId = async ({ categoriesNames }: Args) => {
+  const categories = await prisma.category.findMany({
+    where: { name: { in: categoriesNames } },
+    select: { id: true, name: true, common: true },
   });
-  const parsedCategories = JSON.parse(
-    JSON.stringify(categories),
-  ) as Categories[];
-  return { ok: true, categories: parsedCategories.map((cat) => cat.id) };
+  return { ok: true, categories: categories.map(cat => cat.id) };
 };

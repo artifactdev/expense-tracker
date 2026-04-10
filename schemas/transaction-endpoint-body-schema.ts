@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from 'zod';
 
 const CategorySchema = z.object({
   id: z.union([z.string(), z.number()]),
@@ -13,6 +13,8 @@ const TransactionEndpointBodySchema = z.object({
   date: z.string(),
   selectedCategories: z.array(CategorySchema),
   notes: z.string().optional(),
+  counterparty: z.string().optional(),
+  account: z.string().optional(),
 });
 
 export const TransactionsArraySchema = z.array(TransactionEndpointBodySchema);

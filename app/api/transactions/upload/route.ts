@@ -21,7 +21,7 @@ export const POST = async (req: NextRequest) => {
 
   const processFile = async (file: File) => {
     const results: TransactionBulk[] = [];
-    // eslint-disable-next-line no-async-promise-executor
+     
     return new Promise<Partial<TransactionBulk>[]>(async (resolve, reject) => {
       const fileContent = await file.text();
       const firstLine = fileContent.split('\n')[0];
@@ -48,6 +48,18 @@ export const POST = async (req: NextRequest) => {
             }
             return acc;
           }, {} as Partial<TransactionBulk>);
+
+          // Vorzeichen anhand CdtDbtInd setzen: DBIT = negativ (Ausgabe)
+          if (transformedData.CreditDebit && transformedData.Amount) {
+            const isDebit = transformedData.CreditDebit.trim().toUpperCase() === 'DBIT';
+            const rawAmt = parseFloat(String(transformedData.Amount).replace(',', '.'));
+            if (!isNaN(rawAmt)) {
+              transformedData.Amount = isDebit
+                ? String(-Math.abs(rawAmt))
+                : String(Math.abs(rawAmt));
+            }
+          }
+
           results.push(transformedData as TransactionBulk);
         })
         .on('end', () => resolve(results))
